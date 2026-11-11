@@ -203,7 +203,7 @@ public final class ExactApp {
             let resolver = candidate.assets
             return self.applyTogether(candidate.plan, label: label, resolver: resolver, token: 0, identity: candidate.identity, module: candidate.module, letGo: letGo, commit: { true })
         })
-        connection?.onDevStatus = { [weak self] in self?.showDevStatus($0) } // the old one's went at its close
+        connection?.onDevNotice = { [weak self] in self?.showDevStatus($0) } // the old one's went at its close
     }
 
     public func disconnect() {
@@ -214,7 +214,7 @@ public final class ExactApp {
     /// The connection's page URL, when connected (what a deck's `//` source resolves against).
     public var connectedPage: URL? { connection?.page }
     /// The connection's status line for a dev menu, or nil.
-    public var connectionStatus: String? { connection.map { "\($0.page)\($0.devStatus.map { " (\($0.said))" } ?? ($0.terminal != nil ? " (rebuild the host)" : generationPending ? " (preparing Rust update)" : " (live)"))" } }
+    public var connectionStatus: String? { connection.map { "\($0.page)\($0.devStatus.map { " (\($0.said))" } ?? ($0.terminal != nil ? " (rebuild the host)" : $0.refused != nil ? " (edit not applied)" : generationPending ? " (preparing Rust update)" : " (live)"))" } }
     /// Re-resolve the connection (the menu's Reload; clears a `{rebuilt}` stop).
     public func reloadConnection() { connection?.reload() }
 

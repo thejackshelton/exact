@@ -48,7 +48,7 @@ final class DevPillTests: XCTestCase {
         view.frame = NSRect(x: 0, y: 0, width: 100, height: 100)
         try XCTUnwrap(f.window.contentView).addSubview(view)
         defer { ExactApp.shared.showDevStatus(nil); other.destroy() }
-        ExactApp.shared.showDevStatus(.preparing("building the module producer"))
+        ExactApp.shared.showDevStatus(.loop(.preparing("building the module producer")))
         let pills = { f.window.contentView?.subviews.filter { $0 === f.presenter.devPill || $0 === other.presenter.devPill } ?? [] }
         XCTAssertEqual(pills().count, 1, "one pill a window")
         let owner: ExactSession = f.presenter.devPill != nil ? f.session : other
@@ -56,6 +56,24 @@ final class DevPillTests: XCTestCase {
         owner.destroy()
         XCTAssertNotNil(heir.presenter.devPill, "the other session takes it")
         XCTAssertEqual((heir.presenter.devPill as? NSTextField)?.stringValue, "Dev loop: building the module producer…")
+    }
+
+    /// What the connection says with the last good plan on screen (LLP
+    /// 1159.001 D2): a save that did not apply, and a host to rebuild.
+    func testARefusedSaveAndAStaleHostAreSaidInThePill() throws {
+        if ExactEnv.agentMode || ExactEnv.releaseBuild { throw XCTSkip("no pill under the agent or in a release build") }
+        let f = try SheetFixture()
+        fixture = f
+        f.window.orderFrontRegardless()
+        f.settle()
+        defer { ExactApp.shared.showDevStatus(nil) }
+        let said = { (f.presenter.devPill as? NSTextField)?.stringValue }
+        ExactApp.shared.showDevStatus(.refused("app.contract:41:7 unknown attribute `colour`"))
+        XCTAssertEqual(said(), "Edit not applied: app.contract:41:7 unknown attribute `colour`")
+        ExactApp.shared.showDevStatus(.stale)
+        XCTAssertEqual(said(), "Rebuild this app: its native code changed")
+        ExactApp.shared.showDevStatus(nil)
+        XCTAssertNil(f.presenter.devPill)
     }
 
     /// Through the app's own connection: a loop still starting puts its

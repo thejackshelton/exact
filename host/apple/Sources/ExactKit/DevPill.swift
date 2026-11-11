@@ -1,10 +1,12 @@
-// What the dev loop says before it has a plan to give (dtool2's pass 3 #8;
-// llp/1023.001's dev status): a small pill in the window's bottom corner,
-// "Dev loop: building the module producer …", while a native client's first
-// join waits on the loop's producers, or the error their start ended with.
-// Dev only (a connection to a dev URL; never in a release build), drawn
-// by the host outside the page and the kernel's tree, never under the agent,
-// and gone when the plan comes.
+// What the dev connection has to say that the page cannot (dtool2's pass 3
+// #8; llp/1023.001's dev status; LLP 1159.001): a small pill in the window's
+// bottom corner. "Dev loop: building the module producer …" while a native
+// client's first join waits on the loop's producers, or the error their
+// start ended with; then, with the last good plan still on screen, a save
+// that did not build, or that this binary's native code is behind the
+// server's. Dev only (a connection to a dev URL; never in a release build),
+// drawn by the host outside the page and the kernel's tree, never under the
+// agent, and gone when there is nothing left to say.
 #if os(macOS)
 import AppKit
 #else
@@ -88,11 +90,13 @@ extension ExactApp {
     /// The dev loop's status the windows show, or nil (one app, one status).
     nonisolated(unsafe) static var devStatusText: String?
 
-    /// The dev loop's status in every window, or none.
-    func showDevStatus(_ status: PlanURL.DevStatus?) {
-        let text: String? = switch status {
-        case .preparing(let message): "Dev loop: \(message)…"
-        case .failed(let message): "Dev loop failed to start: \(message)"
+    /// What the dev connection has to say in every window, or nothing.
+    func showDevStatus(_ notice: PlanURL.DevNotice?) {
+        let text: String? = switch notice {
+        case .loop(.preparing(let message)): "Dev loop: \(message)…"
+        case .loop(.failed(let message)): "Dev loop failed to start: \(message)"
+        case .stale: "Rebuild this app: its native code changed"
+        case .refused(let message): "Edit not applied: \(message)"
         case nil: nil
         }
         Self.devStatusText = text

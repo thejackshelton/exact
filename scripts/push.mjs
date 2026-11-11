@@ -256,7 +256,7 @@ export async function pusher(opts) {
       });
     };
     watch(app.dir, { recursive: true }, (_, file) => {
-      if (!file || /(^|\/)(target|node_modules|\.git)(\/|$)/.test(file) || !/\.(contract|rs|toml|json|png|jpe?g|svg|mjs|ts|css|html)$/.test(file)) return;
+      if (!file || /(^|\/)(target|node_modules|\.git)(\/|$)/.test(file) || !/\.(contract|tamber|rs|toml|json|png|jpe?g|webp|gif|svg|ttf|otf|mjs|ts|css|html)$/.test(file)) return;
       clearTimeout(timer);
       timer = setTimeout(() => { console.log(`edit: ${relative(app.dir, resolve(app.dir, file))}`); kick(); }, 60);
     });
