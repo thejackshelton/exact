@@ -8,7 +8,10 @@ reader replays that stream onto Android's own Canvas: a `RenderNode` for each ro
 hardware bitmaps for pictures, `drawGlyphs` for text the Rust has shaped (below Android 12, the glyphs' outlines:
 "Android 10 and 11", below). The two meet at `dev.exact.canvas.Native`,
 whose methods `exact_linux::canvas_jni!(Data)` defines for an app (`host/linux/src/canvas/jni.rs`). Nothing versions
-the stream or those calls, so both sides are built from one commit.
+the stream or those calls, so both sides are built from one commit. The build holds that as far as it can see
+(LLP 1159.002): Gradle runs without file watching, so an edit it was not told of is still read, and the APK is refused
+when the library it packaged does not load what the one the build staged loads. A pair that slips past both shows as
+one line in the log, `exact canvas: unknown op …; the frame stops here`.
 
 | | |
 |---|---|
@@ -1206,6 +1209,10 @@ The cut was the smallest one. Left in the reader:
 
 ## Not done
 
+- **`mix-blend-mode`.** The stream has no blend, so a blended SVG element draws over what is below it; the recorder
+  says so once on the log and the schema's row records it (LLP 1159.000). The pictures the paint walk rasterises itself
+  (SVG filters, `text-shadow`, `-webkit-text-stroke`, `background-clip: text`) are placed as a canvas's is, and have not
+  been seen on a device (`QUEUE.md`, "Android's island pictures").
 - **Most of LLP 1115.001.** The controls have the desktop painter's shapes, and a sheet or a chooser is refused.
   What is built of it:
   - *The reader answers accessibility services* (D13): the section above, with what was and was not seen of

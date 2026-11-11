@@ -2567,6 +2567,12 @@ is checked against the table, but any other computed string is not checked, so
 always build locations with `path()`. A route's parameter fields are strings, with
 empty strings for absent fields. `select` takes a tab name, not a URL.
 
+`open` replaces one tab's stack and leaves the others as they were. Signing
+out of an app with tabs, `open(nav, "/")` alone keeps the last account's
+screens in the other tabs: open each tab's root, the tab to land on last,
+nested because an action's writes land when it ends
+(`nav = open(open(nav, "/history"), "/")`).
+
 `for entry in stack(nav) key=entry.id` gives retained screens their identities.
 Bind the host's navigation root and per-entry `navigationKey`s as the
 [router fixture](../contract/corpus/routes.contract) demonstrates. Test back,
@@ -4688,6 +4694,17 @@ pressable for a disabled prominent button). It is information, not a
 problem: `verify` and `test` say it as a note and do not count it. A field's
 own `color`, `background-color` (or `background`) or `::placeholder color`
 wins over the role, so it is not judged.
+
+A style a native host does not draw as written is recorded on its row in the
+schema (`hosts`), and `contract vocab <name>` prints it (`linux, windows,
+android, on a box: not drawn: a box or an image draws unfiltered`). A style
+with no such line has no gap on record, which is not a measurement. For each
+target the app ships, a style you set that the host there does not draw at
+all is said once, naming every such target (`style-undrawn: \`filter\` is not
+drawn on linux (app.json \`host.linux\`): …`): the node draws there as if the
+style were unset. It is information, as `tamber-unreachable` is. tvOS reads
+iOS's entries; a host that draws a style differently (`differs`) is said by
+`vocab` alone.
 
 A background, border or radius makes it your own box, as in a browser;
 `appearance="none"` says so explicitly. This is decided once after classes
