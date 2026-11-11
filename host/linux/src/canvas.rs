@@ -221,6 +221,9 @@ mod shadow;
 mod slot;
 #[path = "canvas/stream.rs"]
 mod stream;
+#[path = "canvas/undrawn.rs"]
+mod undrawn;
+use undrawn::{path_bounds, undrawn};
 #[cfg(target_os = "android")]
 #[path = "canvas/surface.rs"]
 mod surface;
@@ -637,6 +640,17 @@ impl Backend for Recorder {
         self.picture(&Picture::Canvas(pixels.clone()), dst, clips, ts, None);
     }
 
+    /// A picture the paint walk rasterised itself (an SVG filter, a text
+    /// shadow or stroke, `background-clip: text`), placed as a canvas's is.
+    /// The stream has no blend, so a blended island draws over what is below
+    /// it, and says so once (LLP 1159.000 D1).
+    fn island_image(&mut self, pixels: Arc<Pixmap>, dst: Rect4, ts: Transform, mode: u8) {
+        if mode != 0 {
+            undrawn("`mix-blend-mode`");
+        }
+        self.canvas(&pixels, dst, &[], ts);
+    }
+
     /// A canvas child its surface placed (`paint/placed.rs`), already warped.
     fn surface_image(&mut self, pixels: Arc<Pixmap>, dst: Rect4) {
         self.canvas(&pixels, dst, &[], Transform::identity());
@@ -891,29 +905,6 @@ impl Backend for Recorder {
     fn finish(&mut self) -> Result<Pixmap, String> {
         self.finish_stream()
     }
-}
-
-/// The bounds of a path's points (control points included).
-fn path_bounds(ops: &[PathOp]) -> Option<Rect4> {
-    let mut b: Option<(f32, f32, f32, f32)> = None;
-    let mut add = |x: f32, y: f32| {
-        b = Some(match b {
-            None => (x, y, x, y),
-            Some((a, c, d, e)) => (a.min(x), c.min(y), d.max(x), e.max(y)),
-        })
-    };
-    for op in ops {
-        match *op {
-            PathOp::Move(x, y) | PathOp::Line(x, y) => add(x, y),
-            PathOp::Cubic(a, c, d, e, f, g) => {
-                add(a, c);
-                add(d, e);
-                add(f, g);
-            }
-            PathOp::Close => {}
-        }
-    }
-    b.map(|(x0, y0, x1, y1)| (x0, y0, x1 - x0, y1 - y0))
 }
 
 /// The presenter on the Android main thread, painting through [`Recorder`].

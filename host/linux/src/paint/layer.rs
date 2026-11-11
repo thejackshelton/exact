@@ -15,6 +15,7 @@ use tiny_skia::{Pixmap, Transform};
 /// Walk geometry without drawing pixels, including fully transparent subtrees.
 pub(super) struct Unpainted;
 impl Backend for Unpainted {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "none"
     }

@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 pub struct Failure;
 impl Backend for Failure {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "injected-failure"
     }

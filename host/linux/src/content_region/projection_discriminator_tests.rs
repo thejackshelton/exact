@@ -49,6 +49,7 @@ impl ObservedRaster {
     }
 }
 impl Backend for ObservedRaster {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "cpu"
     }

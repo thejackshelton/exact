@@ -950,6 +950,10 @@ impl Backend for Raster {
         }
     }
 
+    /// Glyphs draw sharp here: only a painter that blurs them as it draws
+    /// them takes the sigma (LLP 1077 D15).
+    fn text_blur(&mut self, _sigma: f32) {}
+
     fn surface_image(&mut self, image: Arc<Pixmap>, dst: Rect4) {
         self.canvas(&image, dst, &[], Transform::identity());
     }

@@ -1,6 +1,7 @@
 # The Android recorder draws no text shadow, text stroke, clipped-text fill or filtered SVG island
 
-**Status:** Open
+**Status:** Closed
+**Resolution:** The recorder places an island as a picture, and no painting method of `Backend` has a default body (LLP 1159.000 D1); a blended island draws unblended and says so. Not seen on a device.
 **Systems:** host/linux/src/canvas.rs (`canvas::Recorder`), host/linux/src/paint/backend.rs
 **Severity:** P2
 **Author:** Claude (Fable 5.2), from the 2026-11-10 project review

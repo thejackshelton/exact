@@ -90,6 +90,7 @@ struct ControlledBackend {
     fail: Rc<Cell<bool>>,
 }
 impl Backend for ControlledBackend {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "test"
     }

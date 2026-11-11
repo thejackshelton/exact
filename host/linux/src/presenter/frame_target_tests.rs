@@ -14,6 +14,7 @@ struct PresentPaint {
     omit_capture: Rc<Cell<bool>>,
 }
 impl Backend for PresentPaint {
+    crate::paints_nothing!();
     fn lost_device_needs_cpu(&self) -> bool {
         self.lost
     }

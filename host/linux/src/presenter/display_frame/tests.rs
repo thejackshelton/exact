@@ -83,6 +83,7 @@ struct CountPaint {
     fail: Rc<Cell<bool>>,
 }
 impl Backend for CountPaint {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "counted-cpu"
     }

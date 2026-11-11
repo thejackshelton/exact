@@ -168,7 +168,7 @@ pub trait Backend {
     fn fill_gradient(&mut self, shape: &Shape, gradient: &gradient::GradientPaint, ts: Transform);
     /// CSS `backdrop-filter` (LLP 1053.000 D2): apply the ordered functions
     /// to what is painted under `shape`, then replace it under the current clip.
-    fn backdrop_filter(&mut self, _shape: &Shape, _filter: &BackdropFilter, _ts: Transform) {}
+    fn backdrop_filter(&mut self, shape: &Shape, filter: &BackdropFilter, ts: Transform);
     /// One outer `box-shadow` by the backend's own blur: `shape` blurred by
     /// `sigma` in `color`, painted only outside `outer` (the border box).
     /// Whether it drew it; else the painter draws it as bands.
@@ -185,7 +185,7 @@ pub trait Backend {
     /// Draw the glyphs `text` draws from here on through a Gaussian blur of
     /// `sigma` points, 0 none, where the backend blurs glyphs as it draws
     /// them (a numeric roll's, LLP 1077 D15); the rest draw them sharp.
-    fn text_blur(&mut self, _sigma: f32) {}
+    fn text_blur(&mut self, sigma: f32);
     /// Fill one colour's share of a border (LLP 1053 G2): region even-odd,
     /// clipped by its side (non-zero) and optional ring (even-odd).
     fn fill_border(&mut self, part: &border::BorderFill, ts: Transform);
@@ -204,11 +204,11 @@ pub trait Backend {
         false
     }
     /// An SVG island's pixels over `dst` in `ts`'s space, blended by `mode`.
-    fn island_image(&mut self, _pixels: Arc<Pixmap>, _dst: Rect4, _ts: Transform, _mode: u8) {}
+    fn island_image(&mut self, pixels: Arc<Pixmap>, dst: Rect4, ts: Transform, mode: u8);
     /// Composite a rendered canvas child (not a decoded image asset).
-    fn surface_image(&mut self, _pixels: Arc<Pixmap>, _dst: Rect4) {}
+    fn surface_image(&mut self, pixels: Arc<Pixmap>, dst: Rect4);
     /// Composite a 2D canvas's bitmap into `dst`, clipped (LLP 1056 D7).
-    fn canvas(&mut self, _pixels: &Arc<Pixmap>, _dst: Rect4, _clips: &[Shape], _ts: Transform) {}
+    fn canvas(&mut self, pixels: &Arc<Pixmap>, dst: Rect4, clips: &[Shape], ts: Transform);
     /// Split an untransformed full-window canvas from the UI, if supported.
     /// A refusal leaves the painter unchanged.
     fn split_window_canvas(&mut self, _dst: Rect4, _clips: &[Shape], _ts: Transform) -> bool {
@@ -252,34 +252,27 @@ pub trait Backend {
         ts: Transform,
     );
     /// Paint one SVG shape in `ts`'s space (LLP 1055 D4).
-    fn svg_path(&mut self, _shape: &SvgPaint<'_>, _ts: Transform) {}
+    fn svg_path(&mut self, shape: &SvgPaint<'_>, ts: Transform);
     /// Clip to an SVG `clipPath` in `ts`'s space until as many pops as this
     /// returns (LLP 1055.000 D10): the union of its shapes, intersected with
     /// its own clip and with whatever clip is in force.
-    fn push_svg_clip(&mut self, _clip: &exact_kernel::svg::scene::Clip, _ts: Transform) -> usize {
-        0
-    }
+    fn push_svg_clip(&mut self, clip: &exact_kernel::svg::scene::Clip, ts: Transform) -> usize;
     /// Clip everything until the matching pop to a shape.
     fn push_clip(&mut self, shape: &Shape, ts: Transform);
     /// Push the kernel's validated CSS path in border-box coordinates.
-    /// Returns whether a clip was pushed (recording/custom backends may opt out).
-    fn push_css_clip(&mut self, _path: &exact_kernel::clip::ClipPath, _ts: Transform) -> bool {
-        false
-    }
+    /// Returns whether a clip was pushed: a backend that cannot clip to a
+    /// path says so, and nothing is popped for it.
+    fn push_css_clip(&mut self, path: &exact_kernel::clip::ClipPath, ts: Transform) -> bool;
     /// End a clip.
     fn pop_clip(&mut self);
     /// Composite everything until the matching pop at an opacity.
     fn push_opacity(&mut self, alpha: f32);
     /// CSS `mask-image` (LLP 1077 D2): what paints until [`Backend::pop_mask`]
     /// is one group, clipped to `shape`, the border box.
-    fn push_mask(&mut self, _shape: &Shape, _ts: Transform) {
-        self.push_opacity(1.0);
-    }
+    fn push_mask(&mut self, shape: &Shape, ts: Transform);
     /// The group, kept where `mask` (a gradient, or one colour) is opaque
     /// over `shape`, the border box, and nowhere outside it.
-    fn pop_mask(&mut self, _shape: &Shape, _mask: &Result<GradientPaint, [u8; 4]>, _ts: Transform) {
-        self.pop_opacity();
-    }
+    fn pop_mask(&mut self, shape: &Shape, mask: &Result<GradientPaint, [u8; 4]>, ts: Transform);
     /// End an opacity layer.
     fn pop_opacity(&mut self);
     /// The pointer arrow at a point.
@@ -419,4 +412,71 @@ impl super::Painter {
     pub fn trim(&mut self) {
         self.backend.trim();
     }
+}
+
+/// The painting methods of [`Backend`] as a backend that draws nothing has
+/// them, written inside its `impl Backend`: a geometry walk, a stand-in for a
+/// failure, a test's observer. They have no default body, so that a painter
+/// cannot skip one by omission (LLP 1159.000 D1); a painter writes each, and
+/// where it does not draw, says so.
+#[macro_export]
+macro_rules! paints_nothing {
+    () => {
+        fn backdrop_filter(
+            &mut self,
+            _: &$crate::paint::Shape,
+            _: &::exact_kernel::style::BackdropFilter,
+            _: ::tiny_skia::Transform,
+        ) {
+        }
+        fn text_blur(&mut self, _: f32) {}
+        fn island_image(
+            &mut self,
+            _: ::std::sync::Arc<::tiny_skia::Pixmap>,
+            _: $crate::paint::Rect4,
+            _: ::tiny_skia::Transform,
+            _: u8,
+        ) {
+        }
+        fn surface_image(
+            &mut self,
+            _: ::std::sync::Arc<::tiny_skia::Pixmap>,
+            _: $crate::paint::Rect4,
+        ) {
+        }
+        fn canvas(
+            &mut self,
+            _: &::std::sync::Arc<::tiny_skia::Pixmap>,
+            _: $crate::paint::Rect4,
+            _: &[$crate::paint::Shape],
+            _: ::tiny_skia::Transform,
+        ) {
+        }
+        fn svg_path(&mut self, _: &$crate::paint::SvgPaint<'_>, _: ::tiny_skia::Transform) {}
+        fn push_svg_clip(
+            &mut self,
+            _: &::exact_kernel::svg::scene::Clip,
+            _: ::tiny_skia::Transform,
+        ) -> usize {
+            0
+        }
+        fn push_css_clip(
+            &mut self,
+            _: &::exact_kernel::clip::ClipPath,
+            _: ::tiny_skia::Transform,
+        ) -> bool {
+            false
+        }
+        fn push_mask(&mut self, _: &$crate::paint::Shape, _: ::tiny_skia::Transform) {
+            self.push_opacity(1.0);
+        }
+        fn pop_mask(
+            &mut self,
+            _: &$crate::paint::Shape,
+            _: &Result<$crate::paint::GradientPaint, [u8; 4]>,
+            _: ::tiny_skia::Transform,
+        ) {
+            self.pop_opacity();
+        }
+    };
 }

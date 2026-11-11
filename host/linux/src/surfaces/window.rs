@@ -736,6 +736,7 @@ mod tests {
 
     struct Lost(bool, bool);
     impl Backend for Lost {
+        crate::paints_nothing!();
         fn prepare_window_frame(&mut self, _: [u32; 2]) -> Result<bool, String> {
             if self.1 {
                 Err("injected reservation refusal".into())

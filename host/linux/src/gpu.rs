@@ -803,6 +803,10 @@ impl Backend for Gpu {
         }
     }
 
+    /// Glyphs draw sharp here: only a painter that blurs them as it draws
+    /// them takes the sigma (LLP 1077 D15).
+    fn text_blur(&mut self, _sigma: f32) {}
+
     fn surface_image(&mut self, image: Arc<Pixmap>, dst: Rect4) {
         self.island_image(image, dst, Transform::identity(), 0);
     }

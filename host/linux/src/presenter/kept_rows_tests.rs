@@ -24,6 +24,7 @@ struct Keeps {
     row: u32,
 }
 impl Backend for Keeps {
+    crate::paints_nothing!();
     fn name(&self) -> &'static str {
         "keeps-rows"
     }

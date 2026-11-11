@@ -13,6 +13,7 @@ thread_local! {
 
 struct Texts;
 impl Backend for Texts {
+    exact_linux::paints_nothing!();
     fn name(&self) -> &'static str {
         "text-observer"
     }
