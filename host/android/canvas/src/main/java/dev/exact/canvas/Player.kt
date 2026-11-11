@@ -937,11 +937,23 @@ internal class Player(private val fonts: Map<Int, Font>) {
                     node = null
                     i += 1
                 }
-                else -> break
+                else -> {
+                    // The library and these classes were built from different sources (LLP 1159.002 D3).
+                    if (!saidUnknownOp) {
+                        saidUnknownOp = true
+                        android.util.Log.e("exact", "exact canvas: unknown op ${b.get(i)} at $i of $n; the frame stops here")
+                    }
+                    break
+                }
             }
         }
         canvas.restoreToCount(base)
         matrixDepth = matrixBase
+    }
+
+    private companion object {
+        /** Whether an unknown op was logged: once a process. */
+        var saidUnknownOp = false
     }
 }
 

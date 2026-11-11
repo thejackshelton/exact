@@ -172,6 +172,27 @@ test('an ELF file\'s LOAD alignment is its smallest PT_LOAD p_align', async () =
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+// What the APK build reads after packaging (LLP 1159.002 D2): AGP strips the library, and what it loads stays.
+test('an APK whose library loads other bytes than the staged one is refused', async () => {
+  const { loadedImage, keptLibrary } = await import('./agent-android.mjs');
+  // Two PT_LOADs (the first holds the ELF header, as a real one does) and a PT_NOTE; `tail` stands for what
+  // stripping removes and `shoff` for the header field it rewrites.
+  const elf = (code, { tail = 0, shoff = 0n } = {}) => {
+    const head = Buffer.alloc(64 + 56 * 3), text = Buffer.from(code);
+    head.writeBigUInt64LE(64n, 0x20); head.writeBigUInt64LE(shoff, 0x28); head.writeUInt16LE(56, 0x36); head.writeUInt16LE(3, 0x38);
+    const load = (i, offset, length) => { head.writeUInt32LE(1, 64 + 56 * i); head.writeBigUInt64LE(BigInt(offset), 64 + 56 * i + 0x08); head.writeBigUInt64LE(BigInt(length), 64 + 56 * i + 0x20); };
+    load(0, 0, head.length); load(1, head.length, text.length); head.writeUInt32LE(4, 64 + 56 * 2);
+    return Buffer.concat([head, text, Buffer.alloc(tail, 7)]);
+  };
+  const staged = elf('one build');
+  expect(loadedImage(staged)).toMatch(/^[0-9a-f]{64}$/);
+  expect(keptLibrary(staged, elf('one build', { shoff: 4096n }), ['app', 'canvas'])).toBe(null);
+  expect(keptLibrary(elf('one build', { tail: 4096 }), staged, ['app', 'canvas'])).toBe(null);
+  const kept = keptLibrary(staged, elf('another one'), ['app', 'canvas']);
+  expect(kept).toBe(`the APK holds a libexactcanvas.so that is not the one this build made (${loadedImage(elf('another one')).slice(0, 12)} in the APK, ${loadedImage(staged).slice(0, 12)} staged, by what each loads). Gradle kept an earlier build's: delete app and canvas and build again`);
+  expect(keptLibrary(staged, null, ['app', 'canvas'])).toBe("the APK holds no libexactcanvas.so. Gradle kept an earlier build's: delete app and canvas and build again");
+});
+
 // An app's directory pins no toolchain, so the Android build asks rustup about the pinned one by name.
 test.skipIf(process.platform === 'win32')('the Android build checks the pinned toolchain for its Rust target', () => {
   const bin = mkdtempSync(resolve(tmpdir(), 'exact-rustup-'));

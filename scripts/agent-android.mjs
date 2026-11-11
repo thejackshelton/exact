@@ -320,6 +320,28 @@ function planOut(messages, crate) {
   return null;
 }
 
+/** The SHA-256 of what an ELF64 file loads: its PT_LOAD segments' bytes, past the ELF header. AGP strips a
+ * packaged library's debug symbols, which rewrites the header and nothing a segment holds, so this is the same
+ * for the library a build staged and the one its APK holds, and differs for another build's (LLP 1159.002 D2). */
+export function loadedImage(elf) {
+  const headers = Number(elf.readBigUInt64LE(0x20)), size = elf.readUInt16LE(0x36), hash = createHash('sha256');
+  for (let i = 0, count = elf.readUInt16LE(0x38); i < count; i++) {
+    const at = headers + i * size;
+    if (elf.readUInt32LE(at) !== 1) continue;
+    const offset = Number(elf.readBigUInt64LE(at + 0x08));
+    hash.update(elf.subarray(Math.max(offset, 64), offset + Number(elf.readBigUInt64LE(at + 0x20))));
+  }
+  return hash.digest('hex');
+}
+
+/** Why an APK's library is not the one its build staged, or null (LLP 1159.002 D2): Gradle can keep an earlier
+ * build's library in its merged intermediates and report the task up to date (QUEUE, "Gradle's file watching"). */
+export function keptLibrary(staged, packaged, dirs) {
+  const made = loadedImage(staged), held = packaged ? loadedImage(packaged) : null;
+  if (made === held) return null;
+  return `the APK holds ${held ? `a libexactcanvas.so that is not the one this build made (${held.slice(0, 12)} in the APK, ${made.slice(0, 12)} staged, by what each loads)` : 'no libexactcanvas.so'}. Gradle kept an earlier build's: delete ${dirs.join(' and ')} and build again`;
+}
+
 /** The smallest alignment of an ELF64 file's PT_LOAD segments (its program headers' p_align). */
 export function loadAlignment(path) {
   const elf = readFileSync(path), headers = Number(elf.readBigUInt64LE(0x20)), size = elf.readUInt16LE(0x36);
@@ -402,7 +424,9 @@ function buildApk(app, env, profile, writeLocks = false) {
   if (!graph) return null;
   let gradle;
   try {
-    gradle = spawnSync(resolve(READER, 'gradlew'), [':app:assembleRelease', `-Papp=${app.name}`, `-PappDir=${app.manifest.game ? app.workspace : app.dir}`,
+    // Without file watching Gradle reads its inputs to decide what is up to date; a watcher that missed an edit
+    // shipped the reader's old classes once (LLP 1159.002 D1).
+    gradle = spawnSync(resolve(READER, 'gradlew'), ['--no-watch-fs', ':app:assembleRelease', `-Papp=${app.name}`, `-PappDir=${app.manifest.game ? app.workspace : app.dir}`,
       `-PexactDevelopment=${development ? '1' : '0'}`,
       `-PappBuildDir=${dirs.app}`, `-PcanvasBuildDir=${dirs.canvas}`, `-PndkPath=${env.ANDROID_NDK_HOME}`, '--project-cache-dir', dirs.cache, `-Pkotlin.project.persistent.dir=${dirs.kotlin}`,
       ...(gpu ? [`-PgpuModule=${basename(gpu)}`] : []), ...compose, ...extensionArgs(app, out, config), ...graph.args], { cwd: READER, env: { ...env, ANDROID_HOME: androidSdk(env) }, stdio: 'inherit' });
@@ -412,6 +436,9 @@ function buildApk(app, env, profile, writeLocks = false) {
   }
   if (gradle.status !== 0) return null;
   const apk = readerApk(app);
+  const packaged = spawnSync('unzip', ['-p', apk, 'lib/arm64-v8a/libexactcanvas.so'], { maxBuffer: 1 << 30 });
+  const kept = keptLibrary(readFileSync(resolve(staged, 'jniLibs/arm64-v8a/libexactcanvas.so')), packaged.status === 0 ? packaged.stdout : null, [dirs.app, dirs.canvas]);
+  if (kept) { console.error(`exact android: ${kept}`); return null; }
   writeFileSync(resolve(dirname(apk), 'exact-build.json'), JSON.stringify({ started, library: built(crate), workspace: app.workspace ?? app.dir,
     sources: [...READER_SOURCES, ...[resolve(app.dir, 'modules/android')].filter(existsSync)] }) + '\n');
   // What its bake inlined of each setting (LLP 1153 D4), bound to the APK, for a drive to compare with their sources.
