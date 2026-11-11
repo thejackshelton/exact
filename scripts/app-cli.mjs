@@ -87,7 +87,7 @@ export function warningLines(dir, host, warnings) {
 /** A compiler warning that is information, not a problem: `tamber-unreachable` names a control whose host draws the
  *  platform's own look, which the author should know of and cannot change (LLP 1121 D9, amended 2026-10-30). A drive
  *  and verify say it but do not count it. contract's `warning_rank::information` is the same test. */
-export const information = (w) => / warning \[tamber-unreachable\] /.test(w);
+export const information = (w) => / warning \[(tamber-unreachable|style-undrawn)\] /.test(w);
 
 /** A compiler warning only the web's picture shows: an SF Symbol drawn blank where the web is the one target besides
  *  Apple's (contract's `web_only`). Its first use names the targets, `ships web (…), where it is blank`; a later one,

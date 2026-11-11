@@ -74,6 +74,7 @@ mod spelling;
 mod states;
 mod stmts;
 mod strings;
+mod style_hosts;
 pub mod style_names;
 mod svg;
 mod swipe_rows;

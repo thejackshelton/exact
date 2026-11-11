@@ -350,13 +350,20 @@ impl Found<'_> {
 /// A node's rows as they may hold: its own, and each set of classes it
 /// may take (a conditional `class` gives one set a branch), its classes'
 /// rows in order.
-struct Rows<'a> {
+pub(crate) struct Rows<'a> {
     own: &'a [Attr],
     branches: Vec<Vec<&'a Attr>>,
 }
 
 impl<'a> Rows<'a> {
-    fn of(attrs: &'a [Attr], styles: &'a [StyleDecl]) -> Rows<'a> {
+    /// Every attribute the node may take: its own, then each class's.
+    pub(crate) fn all(&self) -> impl Iterator<Item = &'a Attr> + '_ {
+        self.own
+            .iter()
+            .chain(self.branches.iter().flatten().copied())
+    }
+
+    pub(crate) fn of(attrs: &'a [Attr], styles: &'a [StyleDecl]) -> Rows<'a> {
         let mut branches: Vec<Vec<&'a Attr>> = vec![Vec::new()];
         for a in attrs.iter().filter(|a| a.name == "class") {
             let mut names = Vec::new();

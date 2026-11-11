@@ -253,6 +253,42 @@ fn main() {
     )
     .unwrap();
 
+    // @ref LLP 1159.000 D2 — a row's `hosts` column, `painted` written out
+    // as the hosts that draw with exact-linux's paint walk.
+    let mut hosts = Vec::new();
+    for row in schema["styles"].as_array().expect("schema.json: `styles`") {
+        let field = row["field"]
+            .as_str()
+            .expect("schema.json: a style's `field`");
+        for entry in row["hosts"].as_array().into_iter().flatten() {
+            let text = |key: &str| entry[key].as_str().unwrap_or("").to_owned();
+            let named = text("host");
+            let each: &[&str] = match named.as_str() {
+                "painted" => &["linux", "windows", "android"],
+                one => &[one],
+            };
+            for host in each {
+                hosts.push((
+                    field.to_owned(),
+                    (*host).to_owned(),
+                    text("on"),
+                    text("fidelity") == "none",
+                    text("why"),
+                ));
+            }
+        }
+    }
+    writeln!(
+        out,
+        "/// A style row a native host does not draw as written: the row's field, the host, `box` or `svg` where the entry is limited to one (else empty), whether it is not drawn at all, and why."
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "pub const STYLE_HOSTS: &[(&str, &str, &str, bool, &str)] = &{hosts:?};"
+    )
+    .unwrap();
+
     let out_dir = std::env::var("OUT_DIR").unwrap();
     std::fs::write(Path::new(&out_dir).join("vocab.rs"), out).unwrap();
 }

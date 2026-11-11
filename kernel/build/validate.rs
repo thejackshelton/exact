@@ -1,5 +1,6 @@
 fn validate(schema: &Schema) {
     validate_controls(schema);
+    validate_style_hosts(schema);
     let mut roles = BTreeSet::new();
     for [role, apple, path] in &schema.symbols {
         // Digits name a skip's seconds (`skip-back-15`, podcast F3), never first.
@@ -284,6 +285,44 @@ fn validate_controls(schema: &Schema) {
                         Some(w) => fidelity != "exact" && !w.trim().is_empty(),
                     },
                 "schema: controls: {control} {parameter}: `{cell}` is no fidelity"
+            );
+        }
+    }
+}
+
+/// One entry of a style row's `hosts` (LLP 1159.000 D2).
+#[derive(Deserialize)]
+struct StyleHostRow {
+    host: String,
+    #[serde(default)]
+    on: Option<String>,
+    fidelity: String,
+    why: String,
+}
+
+/// A style row's `hosts`: a native host or `painted`, a scope where it has
+/// one, `none` or `best-effort`, and why; a host and scope once a row.
+fn validate_style_hosts(schema: &Schema) {
+    const HOSTS: [&str; 6] = ["ios", "macos", "linux", "windows", "android", "painted"];
+    for row in &schema.styles {
+        let mut seen = BTreeSet::new();
+        for entry in &row.hosts {
+            let field = &row.field;
+            assert!(HOSTS.contains(&entry.host.as_str()), "schema: styles: {field}: hosts: unknown host {}", entry.host);
+            assert!(
+                entry.on.as_deref().is_none_or(|on| on == "box" || on == "svg"),
+                "schema: styles: {field}: hosts: `on` is box or svg"
+            );
+            assert!(
+                entry.fidelity == "none" || entry.fidelity == "best-effort",
+                "schema: styles: {field}: hosts: `{}` is neither none nor best-effort",
+                entry.fidelity
+            );
+            assert!(!entry.why.trim().is_empty(), "schema: styles: {field}: hosts: {} says no why", entry.host);
+            assert!(
+                seen.insert((entry.host.as_str(), entry.on.as_deref())),
+                "schema: styles: {field}: hosts: {} twice",
+                entry.host
             );
         }
     }

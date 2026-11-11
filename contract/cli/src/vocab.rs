@@ -947,12 +947,21 @@ fn rows_of(name: &str, a: &AttrTarget) -> &'static [StyleId] {
 }
 
 fn row_json(row: StyleId) -> Value {
-    json!({
+    let mut doc = json!({
         "row": row.name(),
         "codec": vocab::codec(row),
         "values": row.enum_names(),
         "default": vocab::default(row),
-    })
+    });
+    // Only a row with entries has the key: none recorded is not "every host draws it".
+    let hosts = vocab::style_hosts(row);
+    if !hosts.is_empty() {
+        doc["hosts"] = hosts
+            .iter()
+            .map(|e| json!({ "host": e.host, "on": e.on, "fidelity": if e.none { "none" } else { "best-effort" }, "why": e.why }))
+            .collect();
+    }
+    doc
 }
 
 fn tag_json(name: &str, t: &Tag) -> Value {
@@ -1120,6 +1129,43 @@ fn row_text(row: StyleId) -> String {
     text
 }
 
+/// What the schema's `hosts` column records for the rows (LLP 1159.000 D3):
+/// a line an entry, hosts that share a scope and a reason together, and what
+/// the absence of the others means. Nothing for rows with no entry, which is
+/// no claim that every host draws them.
+fn host_lines(rows: &[StyleId]) -> Vec<String> {
+    let mut lines: Vec<(Vec<&str>, vocab::StyleHost)> = Vec::new();
+    for entry in rows.iter().flat_map(|row| vocab::style_hosts(*row)) {
+        match lines
+            .iter_mut()
+            .find(|(_, e)| (e.on, e.none, e.why) == (entry.on, entry.none, entry.why))
+        {
+            Some((hosts, _)) => {
+                if !hosts.contains(&entry.host) {
+                    hosts.push(entry.host);
+                }
+            }
+            None => lines.push((vec![entry.host], entry)),
+        }
+    }
+    let mut out: Vec<String> = lines
+        .iter()
+        .map(|(hosts, e)| {
+            let scope = match e.on {
+                Some("box") => ", on a box",
+                Some(_) => ", inside an `svg`",
+                None => "",
+            };
+            let what = if e.none { "not drawn" } else { "differs" };
+            format!("{}{scope}: {what}: {}", hosts.join(", "), e.why)
+        })
+        .collect();
+    if !out.is_empty() {
+        out.push("no gap is recorded for the other hosts".into());
+    }
+    out
+}
+
 /// An attribute's detail lines: a style's rows (shared description once),
 /// a prop's type, a handler's event.
 fn attr_detail(name: &str, a: &AttrTarget) -> Vec<String> {
@@ -1152,9 +1198,7 @@ fn attr_detail(name: &str, a: &AttrTarget) -> Vec<String> {
                     vocab::transition_properties().join(", ")
                 ));
             }
-            if name == "backdrop-filter" {
-                lines.push("macOS samples only the parent's subtree; make the glass a sibling of what it covers (LLP 1053.000 §3)".into());
-            }
+            lines.extend(host_lines(rows));
             if matches!(name, "width" | "font-size") {
                 lines.push(TEXT_PX_WIDTH.into());
             }

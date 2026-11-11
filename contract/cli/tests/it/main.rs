@@ -201,6 +201,7 @@ mod state_looks;
 mod state_parts;
 mod status_bar;
 mod strings;
+mod style_hosts;
 mod styles;
 mod styles_rows;
 mod surface;

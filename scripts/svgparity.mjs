@@ -16,10 +16,17 @@ const MEAN = 4, OFF = 0.06, BAND = 32, SLOP = 3;
 // Linux paints text in its pinned font, not Chrome's system font, and does
 // not stroke text yet: its text fixtures are held to a looser bound.
 const TEXT = /^fx-(axis|baselines|runs|boxcolor)$/;
-// A fixture a host declares unsupported is not compared there: iOS has no
-// public blend on a layer (LLP 1055.000 §8 ruling 6).
-// Linux draws a box's or an image's CSS `filter` unfiltered for now (QUEUE).
-const UNSUPPORTED = { ios: /^fx-mix$/, linux: /^fx-(box|image)-filter$/ };
+// A fixture is not compared on a host whose column in the schema says it
+// does not draw the row the fixture exercises (LLP 1159.000 D6): to excuse a
+// host here is to tell every author who ships to it.
+const EXERCISES = { 'fx-mix': ['mix_blend_mode', 'svg'], 'fx-box-filter': ['filter', 'box'], 'fx-image-filter': ['filter', 'box'] };
+const PAINTED = ['linux', 'windows', 'android'];
+
+/** The fixtures a host's column declares undrawn, from the schema's `hosts`. */
+export function undrawn(host, schema = JSON.parse(readFileSync(resolve(import.meta.dir, '../kernel/tables/schema.json'), 'utf8'))) {
+  return Object.entries(EXERCISES).filter(([, [field, scope]]) => (schema.styles.find((row) => row.field === field)?.hosts ?? [])
+    .some((e) => e.fidelity === 'none' && (e.host === host || (e.host === 'painted' && PAINTED.includes(host))) && (!e.on || e.on === scope))).map(([id]) => id);
+}
 // Core Animation blends in the display's colour space, CSS in sRGB (LLP
 // 1055.000 §0, stage 10): macOS's blend fixture is held to a looser share.
 const limits = (host, id) => (host === 'linux' && TEXT.test(id) ? { mean: 14, off: 0.16 } : host === 'macos' && id === 'fx-mix' ? { mean: MEAN, off: 0.16 } : { mean: MEAN, off: OFF });
@@ -111,10 +118,11 @@ export async function svgParity({ open, check, hosts }) {
   const ref = await capture(open, 'web', dir, check);
   const rows = [];
   for (const host of hosts) {
+    const unsupported = undrawn(host);
     const got = await capture(open, host, dir, check);
     for (const [page, fixtures] of Object.entries(ref)) {
       for (const [id, a] of Object.entries(fixtures)) {
-        if (UNSUPPORTED[host]?.test(id)) { console.log(`svg parity ${host.padEnd(6)} ${page} ${id.padEnd(16)} declared unsupported`); continue; }
+        if (unsupported.includes(id)) { console.log(`svg parity ${host.padEnd(6)} ${page} ${id.padEnd(16)} declared unsupported`); continue; }
         const b = got[page]?.[id];
         if (!check(a && b && a.width === b.width && a.height === b.height, `${host} ${page} ${id}: no box to compare (off screen or missing)`)) continue;
         let best = null;

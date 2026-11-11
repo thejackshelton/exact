@@ -92,6 +92,9 @@ struct StyleRow {
     rare: bool,
     #[serde(default)]
     cold: bool,
+    /// What a native host does with the row other than draw it (LLP 1159.000 D2).
+    #[serde(default)]
+    hosts: Vec<StyleHostRow>,
 }
 #[derive(Deserialize)]
 struct OpcodeRow {
@@ -1444,7 +1447,8 @@ fn strip_prose(value: serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => serde_json::Value::Object(
             map.into_iter()
-                .filter(|(k, _)| !k.starts_with('_'))
+                // A style row's `hosts` says what a host draws, which no wire carries.
+                .filter(|(k, _)| !k.starts_with('_') && k != "hosts")
                 .map(|(k, v)| (k, strip_prose(v)))
                 .collect(),
         ),

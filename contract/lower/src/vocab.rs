@@ -290,6 +290,37 @@ pub fn transition_properties() -> Vec<&'static str> {
     names
 }
 
+/// What a native host does with a style row other than draw it as written
+/// (LLP 1159.000 D2): the schema's `hosts` column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StyleHost {
+    /// `ios`, `macos`, `linux`, `windows` or `android`.
+    pub host: &'static str,
+    /// `box` (an element outside an `svg`) or `svg` where the entry is
+    /// limited to one.
+    pub on: Option<&'static str>,
+    /// Not drawn at all, the node as if the row were unset; else drawn
+    /// differently, as `why` says.
+    pub none: bool,
+    /// The sentence an author reads.
+    pub why: &'static str,
+}
+
+/// A style row's entries in the `hosts` column, in the schema's order. None
+/// means no gap is recorded, which is not a measurement.
+pub fn style_hosts(row: StyleId) -> Vec<StyleHost> {
+    STYLE_HOSTS
+        .iter()
+        .filter(|(field, ..)| *field == row.name())
+        .map(|&(_, host, on, none, why)| StyleHost {
+            host,
+            on: (!on.is_empty()).then_some(on),
+            none,
+            why,
+        })
+        .collect()
+}
+
 /// A style row's default as the schema writes it, if it declares one; a
 /// colour's zero is `transparent`.
 pub fn default(row: StyleId) -> Option<&'static str> {
