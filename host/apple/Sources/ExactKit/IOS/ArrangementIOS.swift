@@ -175,7 +175,7 @@ final class ArrangementHost {
             if presenter.views[id] === entry.node { presenter.placeChildren(entry.node, children[id] ?? entry.panes.map(\.id)) }
         }
         for (id, controller) in requests where entries[id] == nil {
-            guard let node = presenter.views[id], let owner = ViewPresentation.controllers(for: node).first,
+            guard let node = presenter.views[id], let owner = ViewPresentation.controllers(for: node, layout: true).first,
                   let ids = paneIDs(of: node) else { continue }
             let panes = ids.compactMap { presenter.views[$0] }
             let entry = Entry(node: node, controller: controller, panes: panes) { [weak self] in self?.layoutChanged() }
@@ -209,7 +209,7 @@ final class ArrangementHost {
     }
 
     private func route(of node: NodeView) -> RouteController? {
-        ViewPresentation.controllers(for: node).compactMap { $0 as? RouteController }.first
+        ViewPresentation.controllers(for: node, layout: true).compactMap { $0 as? RouteController }.first
     }
 
     private func retire(_ entry: Entry) {
@@ -357,7 +357,7 @@ final class ArrangementHost {
     /// area of its parent's, so an arrangement left under the root misses the route's bars.
     private func adoptOwners() {
         for entry in entries.values {
-            guard let owner = ViewPresentation.controllers(for: entry.node).first, entry.controller.parent !== owner else { continue }
+            guard let owner = ViewPresentation.controllers(for: entry.node, layout: true).first, entry.controller.parent !== owner else { continue }
             entry.controller.willMove(toParent: nil)
             entry.controller.removeFromParent()
             owner.addChild(entry.controller)
@@ -370,14 +370,14 @@ final class ArrangementHost {
     /// them there would give its panes the bars twice for that frame.
     private func syncSafeAreas() {
         for entry in entries.values {
-            guard let route = route(of: entry.node), let window = route.view.window else { continue }
+            guard let route = route(of: entry.node), let window = route.surface.window else { continue }
             if entry.controller.parent === route {
                 for holder in entry.holders where holder.additionalSafeAreaInsets != .zero { holder.additionalSafeAreaInsets = .zero }
                 continue
             }
             for holder in entry.holders where holder.view.window === window {
-                let frame = holder.view.convert(holder.view.bounds, to: route.view)
-                let room = route.view.bounds.inset(by: route.view.safeAreaInsets)
+                let frame = holder.view.convert(holder.view.bounds, to: route.surface)
+                let room = route.surface.bounds.inset(by: route.surface.safeAreaInsets)
                 let expected = UIEdgeInsets(top: max(0, min(frame.height, room.minY - frame.minY)), left: 0,
                                            bottom: max(0, min(frame.height, frame.maxY - room.maxY)), right: 0)
                 let actual = holder.view.safeAreaInsets, extra = holder.additionalSafeAreaInsets
@@ -399,8 +399,8 @@ final class ArrangementHost {
             let point = PixelGrid.offset(CGPoint(x: scroll.contentOffset.x, y: top - node.scrollTopInset(scroll)), in: scroll)
             if scroll.contentOffset != point { scroll.contentOffset = point }
             guard let route = route(of: node) else { continue }
-            let frame = scroll.convert(scroll.bounds, to: route.view)
-            let expected = max(0, route.view.safeAreaInsets.top - frame.minY)
+            let frame = scroll.convert(scroll.bounds, to: route.surface)
+            let expected = max(0, route.surface.safeAreaInsets.top - frame.minY)
             if abs(scroll.safeAreaInsets.top - expected) < 1 {
                 scroll.contentOffset = PixelGrid.offset(scroll.contentOffset, in: scroll)
                 pendingTops[id] = nil

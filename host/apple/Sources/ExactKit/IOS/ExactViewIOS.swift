@@ -166,7 +166,7 @@ public final class ExactView: UIView {
 
     private func fitAheadOfLayout() {
         guard !fitting, session.booted, window != nil,
-              session.presenter.navigation.primaryOwner != nil, bounds.size != fittedSize else { return }
+              (session.presenter.navigation.primaryOwner ?? session.presenter.navigation.bootOwner) != nil, bounds.size != fittedSize else { return }
         fit()
         // Autoresizing may precede UIKit's safe-area update. The normal
         // layout still rereads insets and regions after its parent settles.
@@ -211,6 +211,14 @@ public final class ExactView: UIView {
 
     /// The first root's `viewport-fit` prop (`"cover"` or nothing).
     public var viewportFit: String? { session.presenter.viewportFit }
+
+    public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        #if os(iOS)
+        // A touch starts under the real owner, so its scroll cannot span the boot transfer.
+        if session.presenter.navigation.bootOwner != nil, event?.type == .touches { session.presenter.navigation.finishBootOwner() }
+        #endif
+        return super.hitTest(point, with: event)
+    }
 
     public override func layoutSubviews() {
         super.layoutSubviews()
@@ -360,7 +368,19 @@ public final class ExactView: UIView {
     /// Native containers stay full size; their editing route owns avoidance.
     /// An ordinary page resizes its viewport or insets its content.
     func fit(boot: Bool = true) {
-        guard !fitting else { setNeedsLayout(); return }
+        guard !fitting else {
+            // A keyboard-guide change can lay this view out synchronously.
+            // Marking it dirty in that layout would keep UIKit in the same pass.
+            if !fitPending {
+                fitPending = true
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    fitPending = false
+                    setNeedsLayout()
+                }
+            }
+            return
+        }
         fitting = true
         defer { fitting = false }
         fitSession(boot: boot)
@@ -402,6 +422,10 @@ public final class ExactView: UIView {
             return
         }
         guard bounds.width > 0, bounds.height > 0 else { return }
+        #if os(iOS)
+        // A launch resize (including rotation) uses the native owner for the new geometry.
+        if fittedSize != .zero, bounds.size != fittedSize, presenter.navigation.bootOwner != nil { presenter.navigation.finishBootOwner() }
+        #endif
         fittedSize = bounds.size
         // @ref LLP 1123 D1 — the document is the session view's; a
         // presentation lays its routes out in their own blocks (D2)
@@ -475,7 +499,7 @@ public final class ExactView: UIView {
         }
         presenter.placeDocumentMount()
         // Establish UIKit's containing bounds before sampling route blocks.
-        if let owner = presenter.navigation.primaryOwner {
+        if let owner = presenter.navigation.primaryOwner ?? presenter.navigation.bootOwner {
             presenter.navigation.fitOwner()
             owner.view.layoutIfNeeded()
         }

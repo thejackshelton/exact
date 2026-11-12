@@ -1194,8 +1194,8 @@ package final class NodeView: UIView, UITextViewDelegate, UITextFieldDelegate, U
         if f.picture.sublayers?.first?.contents as AnyObject? !== before { filterPublished() }
     }
 
-    /// Inside `GlassGroups.moving`: a container comes or goes under the
-    /// same authored parent, which is no reparenting.
+    /// A native container comes or goes under the same authored parent
+    /// (`GlassGroups.moving`, boot navigation): no authored reparenting.
     static var containerMoves = 0
     package override func didMoveToSuperview() {
         if Self.containerMoves == 0 { pressEpoch &+= 1; cancelPressContact(reparenting: true); presenter?.unshown(self) } // a new parent: shown elsewhere

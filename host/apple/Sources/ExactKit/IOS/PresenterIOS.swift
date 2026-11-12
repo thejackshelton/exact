@@ -441,6 +441,7 @@ package final class Presenter {
     /// `fields`: the next text field only, never wrapping (the keyboard's
     /// Next); false when there is none.
     @discardableResult func moveFocus(backward: Bool, fields: Bool = false) -> Bool {
+        navigation.finishBootOwner()
         guard let window = root.window else { return false }
         var top = window.rootViewController
         while let next = top?.presentedViewController, !next.isBeingDismissed { top = next }
@@ -642,13 +643,14 @@ package final class Presenter {
     private(set) var pressPoint: CGPoint?
     /// `at`: the touch's point in the window.
     package func press(_ id: UInt32, held: String = "", at: CGPoint? = nil, bubbled: Bool = false) {
+        navigation.finishBootOwner()
         pressHeld = held; pressPoint = at.map(client); defer { pressHeld = ""; pressPoint = nil }
         if let node = views[id], let url = node.defaultLink, node.activateLink(url, bubbled: bubbled) { return }
         let original = views[id]
         dispatchPressHandler(id, from: original)
         if let original, views[id] === original { menus.invoke(original, bubbled: bubbled) }
     }
-    func change(_ id: UInt32, _ value: String) { onChange?(id, value) }
+    func change(_ id: UInt32, _ value: String) { send(id) { [self] in onChange?(id, value) } }
     /// A text field typed into since it took the focus: its `change` fires
     /// when the editing ends or Enter commits it, HTML's `change` (LLP
     /// 1069.001 D4); every keystroke is its `input`.
@@ -657,8 +659,10 @@ package final class Presenter {
     /// A checkbox's new state, reported as HTML's `input` then `change`.
     var onChecked: ((UInt32, Bool) -> Void)?
     func typed(_ id: UInt32, _ value: String, input: Bool) {
-        edited = id
-        if input { onInput?(id, value) }
+        send(id) { [self] in
+            edited = id
+            if input { onInput?(id, value) }
+        }
     }
     func commitEdit(_ id: UInt32, _ value: String, change: Bool) {
         guard edited == id, !menus.preservesFocus(id) else { return }
@@ -672,11 +676,11 @@ package final class Presenter {
         }
         if change { onChange?(id, value) }
     }
-    package func checked(_ id: UInt32, _ on: Bool) { onChecked?(id, on) }
+    package func checked(_ id: UInt32, _ on: Bool) { send(id) { [self] in onChecked?(id, on) } }
     /// A select's, range's or date's new value (LLP 1069.001 D4): HTML's
     /// `input` as it moves, `change` as it is committed.
     var onControlValue: ((UInt32, String, Bool, Bool) -> Void)?
-    func controlValue(_ id: UInt32, _ value: String, input: Bool, change: Bool) { onControlValue?(id, value, input, change) }
+    func controlValue(_ id: UInt32, _ value: String, input: Bool, change: Bool) { send(id) { [self] in onControlValue?(id, value, input, change) } }
     /// A select's options and the one it shows, read from the kernel.
     var selectOptions: ((UInt32) -> SelectMenu)?
     var buttonFace: ((UInt32) -> ButtonFace)?
@@ -700,7 +704,7 @@ package final class Presenter {
     var changedText: Set<UInt32> = []
     private func send(_ id: UInt32, _ f: @escaping () -> Void) {
         guard textHost(id) != nil else { return }
-        if applying { waiting.append((id, f)) } else { f() }
+        if applying { waiting.append((id, f)) } else { navigation.finishBootOwner(); f() }
     }
     func hover(_ view: NodeView, _ over: Bool) {
         if over { hoverInline(nil) }

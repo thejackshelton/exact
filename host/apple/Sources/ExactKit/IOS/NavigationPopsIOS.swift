@@ -211,7 +211,7 @@ extension RouteController {
     /// The stack it is in: its plain tab, checked first because under More
     /// the plain tab's `navigationController` is More's; else its navigation
     /// controller.
-    var stack: UIViewController? { (parent as? PlainTab) ?? navigationController }
+    var stack: UIViewController? { (parent as? PlainTab) ?? navigationController ?? (bootSurface != nil ? host?.bootOwner : nil) }
 
     /// Cover the route with its pixels as drawn now, before a batch removes
     /// the route (`NavigationHost.prepare`): a button can remove a route

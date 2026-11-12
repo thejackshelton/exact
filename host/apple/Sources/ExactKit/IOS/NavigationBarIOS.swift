@@ -1024,7 +1024,7 @@ extension NavigationHost {
             fitOwner()
             return
         }
-        for current in ViewPresentation.controllers(for: node) {
+        for current in ViewPresentation.controllers(for: node, layout: true) {
             if let route = current as? RouteController, route.host === self, let stack = route.stack {
                 guard route.collapseScroll === node || route.edgeScroll === node || (node.scrollView != nil && contentScroller(of: route) === node) else { return }
                 prepareRoutes(stack.stackRoutes.compactMap { $0 as? RouteController }, in: stack)

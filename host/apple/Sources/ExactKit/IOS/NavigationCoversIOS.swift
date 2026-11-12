@@ -14,7 +14,7 @@ extension NavigationHost {
     /// presentation's containers never decide it (LLP 1123 D1); its routes
     /// clear what covers them (`reportCovers`). Not under the agent's own
     /// chrome, where no native container shows.
-    var wantsWholeView: Bool { primaryOwner != nil && !ExactEnv.authoredChrome }
+    var wantsWholeView: Bool { (primaryOwner != nil || bootOwner != nil) && !ExactEnv.authoredChrome }
 
     /// @ref LLP 1075.003 §3.7, LLP 1083.000 D4 — the native container stands
     /// for the routes in the navigation root's paint order. Its box can extend
@@ -146,7 +146,7 @@ extension NavigationHost {
             // under More, and none on the tab bar.
             let search = searching(c)
             let barAbove = nav.map { c.parent is PlainTab ? !$0.isNavigationBarHidden : routeShowsBar(c, in: $0) } ?? false
-            let settled = c.viewIfLoaded?.window != nil && (search || (nav?.isNavigationBarHidden ?? true) != barAbove)
+            let settled = c.surface.window != nil && (search || (nav?.isNavigationBarHidden ?? true) != barAbove)
             // A route showing no bar has no title: its inset is the status bar's, none in landscape (LLP 1130 D3).
             let barless = !barAbove
             let topPeers = arrangementScrollers(in: c, top: true), bottomPeers = arrangementScrollers(in: c, top: false)
@@ -173,14 +173,14 @@ extension NavigationHost {
             if settled {
                 // A route offset in its block, past a box beside it (`clearBesideRoutes`), clears only the part of
                 // each side's inset its box reaches
-                let box = c.node.convert(c.node.bounds, to: c.view)
-                var safe = c.view.safeAreaInsets
+                let box = c.node.convert(c.node.bounds, to: c.surface)
+                var safe = c.surface.safeAreaInsets
                 safe.left = max(0, safe.left - max(0, box.minX))
-                safe.right = max(0, safe.right - max(0, c.view.bounds.maxX - box.maxX))
+                safe.right = max(0, safe.right - max(0, c.surface.bounds.maxX - box.maxX))
                 // The route's end with its page unscrolled: scrolling moves the route, not the bars.
                 // A route the keyboard shortens can end above the bars, with no bottom cover.
                 let end = c.node.convert(c.node.bounds, to: c.contentMount).maxY + (c.contentViewport?.frame.minY ?? 0)
-                let reached = end - (c.view.bounds.maxY - safe.bottom)
+                let reached = end - (c.surface.bounds.maxY - safe.bottom)
                 // A transparent bar covers nothing of the route's top, scroller or not: the content starts under it.
                 edges = Self.routeEdges(safe: safe, whole: whole, covered: covered,
                                         collapses: c.collapseScroll != nil || !topPeers.isEmpty || !c.ridingBars.isEmpty || Self.insetsNoTop(c.node),
@@ -351,7 +351,8 @@ extension NavigationHost {
         var wanted: [UInt32?: [CGFloat]] = [:]
         for c in controllers.values where presenter.views[c.node.id] === c.node {
             let last = localInsets.wanted[c.node.id]
-            guard let view = c.viewIfLoaded, view.window != nil, c.node.window != nil,
+            let view = c.surface
+            guard view.window != nil, c.node.window != nil,
                   last == nil || c.navigationController?.transitionCoordinator == nil else {
                 wanted[c.node.id] = last
                 continue

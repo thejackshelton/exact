@@ -840,7 +840,10 @@ public final class ExactSession {
         presenter.onSubmit = { [unowned self] id in applyInput(runtime.submit(id, now: now())) }
         presenter.onLoad = { [unowned self] id in apply(runtime.load(id, now: now())) }
         presenter.onMessage = { [unowned self] id, value in apply(runtime.message(id, value, now: now())) }
-        presenter.onClipboard = { [unowned self] id, kind, text in let batch = runtime.clipboard(id, kind, text, now: now()); if kind == 50 { apply(batch) } else { applyInput(batch) } } // 50: a popover's `toggle`, which an app's command fires too
+        presenter.onClipboard = { [unowned self] id, kind, text in
+            if kind == 50 { apply(runtime.clipboard(id, kind, text, now: now())) }
+            else { applyInput(runtime.clipboard(id, kind, text, now: now())) }
+        } // 50: a popover's `toggle`, which an app's command fires too
         presenter.onSelectionChange = { [unowned self] id, text, start, end, rects in
             apply(runtime.selectionChange(id, text, start: start, end: end, rects: rects, now: now()))
         }
@@ -1186,7 +1189,17 @@ public final class ExactSession {
         frames.tasks = batch.frames
         updateTimerState(batch)
         // The GPU module: after the first painted frame, only when a canvas exists.
-        if firstDrawMs != nil { canvases.loadIfNeeded(); natives.loadIfNeeded(); drainSurfaceWork() } else { DispatchQueue.main.async { [weak self] in guard let self else { return }; canvases.loadIfNeeded(); drainSurfaceWork(); frames.run(frames.hasWork) } }
+        if firstDrawMs != nil {
+            afterBootOwner { [weak self] in
+                guard let self, state != .destroyed else { return }
+                canvases.loadIfNeeded(); natives.loadIfNeeded(); drainSurfaceWork()
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.afterBootOwner { [weak self] in
+                guard let self, state != .destroyed else { return }
+                canvases.loadIfNeeded(); drainSurfaceWork(); frames.run(frames.hasWork)
+            } }
+        }
         timerDue = batch.timerDueMs; timerLanding = batch.landing
         scheduleClock(due: batch.timerDueMs)
         if outermost {
@@ -1421,33 +1434,6 @@ public final class ExactSession {
               presenter.views[node]?.handlers.contains("select") == true,
               let batch = runtime.selection(node, json: json, now: now()) else { return }
         apply(batch)
-    }
-    /// @ref LLP 1038 D8/D11 — pre-boot URLs are launch facts; the adapter consumes development links first.
-    @discardableResult public func openURL(_ url: URL) -> Bool {
-        guard state != .destroyed else { return false }
-        return openIncoming(incomingLocation(url))
-    }
-    /// A link the reader followed — a `link href`, a text run's `href`, a
-    /// Markdown link. A path naming one of the app's routes is a location
-    /// for the navigation root, as the web's same-document link is (LLP 1038
-    /// §7); anything else — a page, a file beside a document — is the
-    /// containing app's to open (`openURL`).
-    @discardableResult public func follow(_ href: String) -> Bool {
-        guard state != .destroyed, !href.isEmpty else { return false }
-        // A link to a fragment (`href="#moves"`) is the visit shown, at that fragment (LLP 1153 D5).
-        let href = href.hasPrefix("#") ? String((routerOp?["url"] as? String ?? "/").prefix { $0 != "#" }) + href : href
-        if href.hasPrefix("/"), !href.hasPrefix("//"), booted, runtime.routeMatches(href) { return navigate(href) }
-        delegate?.exactSession(self, command: "openURL", args: [href])
-        return true
-    }
-    @discardableResult public func navigate(_ location: String) -> Bool {
-        guard state != .destroyed, booted else { return false }
-        let batch: Batch
-        if let node = navigationRoot { batch = runtime.navigate(node.id, location, now: now()) }
-        else if runtime.routeMatches(location) { batch = runtime.hostGo(location, now: now()) }
-        else { log("navigate refused: no navigation root handler or matching route"); return false }
-        apply(batch)
-        return batch.error == nil
     }
     /// Everything attributable to this session goes (D2): the display link
     /// and clock, the surface instances, the web views, the views, the

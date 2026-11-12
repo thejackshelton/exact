@@ -186,6 +186,8 @@ package final class Runtime {
     package static let busy = Batch(ops: [], timers: false, motion: false, clock: nil,
         error: "busy: the owner is waiting on this callback (LLP 1072 T5)", busy: true)
     package static let busyAgent = "{\"error\":\"busy: the owner is waiting on this callback (LLP 1072 T5)\"}"
+    /// Main-thread admission before an event enters the runner, including posted jobs.
+    package var beforeEvent: (() -> Void)?
     /// While a restart's reset tears the old tree's views down (Session `presentCommitted`): the one entry every
     /// batch-answering call takes, so this runtime, which replaces that tree, takes none of them before its committed
     /// batch lands. Each answers an empty batch, the runtime untouched, and is named in `heldCalls` (its method, by
@@ -198,8 +200,12 @@ package final class Runtime {
     package func takeHeldCalls() -> [String] { defer { heldCalls = [] }; return heldCalls }
     /// Whether held; if so, `caller` is named in `heldCalls` (a call held outside `on`: `selection`, a notice's `later`).
     package func holds(_ caller: String = #function) -> Bool { if held { heldCalls.append(caller) }; return held }
-    package func on(_ body: () -> Batch, caller: String = #function) -> Batch {
-        if holds(caller) { return Runtime.heldBatch }
+    package func enter(_ caller: String = #function, layout: Bool = false) -> Bool {
+        if !held, !layout, Thread.isMainThread { beforeEvent?() }
+        return holds(caller)
+    }
+    package func on(layout: Bool = false, _ body: () -> Batch, caller: String = #function) -> Batch {
+        if enter(caller, layout: layout) { return Runtime.heldBatch }
         if Thread.isMainThread { entered &+= 1 } // (`later` calls on the owner: the spy counts main's)
         let (open, modal, backdrop) = topLayer?() ?? ([], nil, nil)
         return Owner.shared.sync({
@@ -305,7 +311,7 @@ package final class Runtime {
     }
     /// Boot the plan baked into the library under a viewport; the first batch.
     /// The display's scale and memory for Canvas 2D (LLP 1056 D4).
-    package func canvasDisplay(scale: CGFloat, memory: UInt64) -> Batch { on { read(exact_canvas_display(rt, Double(scale), Double(memory))) } }
+    package func canvasDisplay(scale: CGFloat, memory: UInt64) -> Batch { on(layout: true) { read(exact_canvas_display(rt, Double(scale), Double(memory))) } }
     /// A Canvas 2D image handle decoded (its size in pixels) or not (LLP 1056 D9).
     package func canvasImage(_ src: String, width: Int, height: Int, ok: Bool) -> Batch {
         return on {
@@ -416,7 +422,7 @@ package final class Runtime {
     package func pump(now: Double) -> Batch { on { read(exact_pump(rt, now)) } }
     /// Capture native presentation on the caller before parsing replies on the owner.
     package func pumpAsync(now: Double, done: @escaping (Batch?) -> Void) {
-        if holds() { Owner.shared.post { done(nil) }; return } // (held: answered on the owner as a cancelled reply, `held`)
+        if enter() { Owner.shared.post { done(nil) }; return } // (held: answered on the owner as a cancelled reply, `held`)
         let (open, modal, backdrop) = topLayer?() ?? ([], nil, nil)
         Owner.shared.post { [self] in
             guard !destroyed else { done(nil); return }
@@ -489,7 +495,7 @@ package final class Runtime {
     /// `left`, `top`: the scroll and view timelines it drives, presented, to
     /// apply in the scroll's own frame (LLP 1057.003 D5).
     package func timelineScrolled(_ view: UInt32?, left: Double, top: Double) -> Batch {
-        on { read(exact_timeline_scrolled(rt, view == nil ? 1 : 0, view ?? 0, left, top)) }
+        on(layout: true) { read(exact_timeline_scrolled(rt, view == nil ? 1 : 0, view ?? 0, left, top)) }
     }
     package func holdUpdate(_ token: UInt64, x: Double, y: Double, now: Double) -> Batch {
         return on {
@@ -573,7 +579,7 @@ package final class Runtime {
     /// A build-only report on the owner, not waited for (LLP 1072 §3):
     /// `done` runs on the owner with the decoded batch.
     package func collectionFeedbackAsync(_ bytes: Data, now: Double, done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return } // (held: answered on the owner, so what waits on it ends)
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return } // (held: answered on the owner, so what waits on it ends)
         Owner.shared.post { [self] in
             guard !destroyed else { return }
             let n = write(bytes)
@@ -586,7 +592,7 @@ package final class Runtime {
     package func canvasDefer(_ deferred: Bool) { on { exact_canvas_defer(rt, deferred ? 1 : 0) } }
     /// The owed canvas draws on the owner, not waited for (LLP 1072 §8.5).
     package func canvasDrawAsync(done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return }
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return }
         Owner.shared.post { [self] in
             guard !destroyed else { return }
             done(read(exact_canvas_draw(rt)))
@@ -597,7 +603,7 @@ package final class Runtime {
     /// `calls`, in order, on the owner and not waited for: each batch goes to
     /// `done` there (LLP 1027.007 P1).
     package func later(_ calls: [(Runtime) -> Batch], done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { for _ in calls { done(Runtime.heldBatch) } }; return }
+        if enter() { Owner.shared.post { for _ in calls { done(Runtime.heldBatch) } }; return }
         Owner.shared.post { [self] in
             for call in calls {
                 guard !destroyed else { return }
@@ -606,7 +612,7 @@ package final class Runtime {
         }
     }
     package func tickAsync(now: Double, frame: Double? = nil, capture: UInt64 = 0, measureFrame: Bool = false, done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return }
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return }
         let queued = capture == 0 ? 0 : hostMediaTime()
         Owner.shared.post { [self] in
             guard !destroyed else { return }
@@ -715,7 +721,7 @@ package final class Runtime {
     }
     /// Shared Markdown selection facts; the editor retains its own range.
     package func selection(_ view: UInt32, json: String, now: Double) -> Batch? {
-        if holds() { return nil } // (the Batch barrier's, above)
+        if enter() { return nil } // (the Batch barrier's, above)
         return on(busy: nil) {
             guard let data = json.data(using: .utf8),
                   let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -817,6 +823,7 @@ package final class Runtime {
     /// `{"extension", "handle", "handler", "args"}`: the runner's answer,
     /// JSON, goes to `reply(ctx, …)` once, now or when the handler's work lands.
     package func invokeModule(_ body: String, reply: ExactInvokeReply, ctx: UnsafeMutableRawPointer?) {
+        if Thread.isMainThread { beforeEvent?() }
         let ran = on(busy: false) { () -> Bool in exact_module_invoke(rt, write(body), reply, ctx); return true }
         if !ran {
             let busy = Array("{\"error\":\"InvalidStateError\",\"message\":\"the runtime is busy\"}".utf8)
@@ -827,7 +834,7 @@ package final class Runtime {
         on { read(exact_timer_waits(rt, kinds, cutoff, mode)) }
     }
     package func timerWaitsAsync(kinds: UInt32, cutoff: Double, done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return }
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return }
         Owner.shared.post { [self] in
             guard !destroyed else { return }
             done(read(exact_timer_waits(rt, kinds, cutoff, 1)))
@@ -837,7 +844,7 @@ package final class Runtime {
         on { read(exact_fire_native_timer(rt, timer.index, timer.generation, now)) }
     }
     package func fireNativeTimerAsync(_ timer: NativeTimerWake, now: Double, done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return }
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return }
         Owner.shared.post { [self] in
             guard !destroyed else { return }
             done(read(exact_fire_native_timer(rt, timer.index, timer.generation, now)))
@@ -851,7 +858,7 @@ package final class Runtime {
     /// A timer advance on the owner, not waited for (LLP 1072.000): what is
     /// due by `now`, or with `frame` that display frame's (`frame(now:wall:)`).
     package func advanceAsync(now: Double, frame: Double? = nil, admitted: Bool = false, capture: UInt64 = 0, measureFrame: Bool = false, done: @escaping (Batch) -> Void) {
-        if holds() { Owner.shared.post { done(Runtime.heldBatch) }; return }
+        if enter() { Owner.shared.post { done(Runtime.heldBatch) }; return }
         let queued = capture == 0 ? 0 : hostMediaTime()
         Owner.shared.post { [self] in
             guard !destroyed else { return }
@@ -868,7 +875,7 @@ package final class Runtime {
     package func startOnFrame(_ yes: Bool, at: Double) -> Batch { on { read(exact_start_on_frame(rt, yes ? 1 : 0, at)) } }
     package func presentFrames(_ yes: Bool) { on { () -> Void in _ = exact_present_frames(rt, yes ? 1 : 0) } }
 
-    package func resize(width: CGFloat, height: CGFloat) -> Batch { on { read(exact_resize(rt, Float(width), Float(height))) } }
+    package func resize(width: CGFloat, height: CGFloat) -> Batch { on(layout: true) { read(exact_resize(rt, Float(width), Float(height))) } }
     /// A placement root's resolved margins (left, top, right, bottom) and 1 for an authored width, then the resolved minimum width
     /// (LLP 1126.001 WP10); nil when the view is not laid out.
     package func placementBox(_ view: UInt32) -> [CGFloat]? {
@@ -879,18 +886,18 @@ package final class Runtime {
             return values.map { CGFloat($0) }
         }
     }
-    package func setTime(epochAtZero: Double, utcOffset: Double) -> Batch { on { read(exact_set_time(rt, epochAtZero, utcOffset)) } }
+    package func setTime(epochAtZero: Double, utcOffset: Double) -> Batch { on(layout: true) { read(exact_set_time(rt, epochAtZero, utcOffset)) } }
     package func setLaunchTime(epochAtZero: Double, utcOffset: Double) { on { () -> Void in _ = exact_set_launch_time(rt, epochAtZero, utcOffset) } }
     @discardableResult
     package func setLaunchPlace(locale: String, timeZone: String, seed: UInt64, formatLocale: String = "") -> Batch { on {
         let count = exact_set_launch_place(rt, write(locale + "\0" + timeZone + "\0" + String(seed) + "\0" + formatLocale))
         return count == 0 ? Batch(ops: [], timers: false, motion: false, clock: nil, error: nil) : read(count)
     } }
-    package func setPreferences(_ bits: UInt32) -> Batch { on { read(exact_set_preferences(rt, bits)) } }
-    package func setPage(_ bits: UInt32) -> Batch { on { read(exact_set_page(rt, bits)) } }
+    package func setPreferences(_ bits: UInt32) -> Batch { on(layout: true) { read(exact_set_preferences(rt, bits)) } }
+    package func setPage(_ bits: UInt32) -> Batch { on(layout: true) { read(exact_set_page(rt, bits)) } }
     /// Whether the running plan reads `onLine`; true when the owner is busy.
     package func readsOnLine() -> Bool { on(busy: true) { exact_reads_on_line(rt) != 0 } }
-    package func setRootFontSize(_ px: Double) -> Batch { on { read(exact_set_root_font_size(rt, px)) } }
+    package func setRootFontSize(_ px: Double) -> Batch { on(layout: true) { read(exact_set_root_font_size(rt, px)) } }
     /// A live design batch or snapshot frame (LLP 1121 stage 4), applied in place.
     package func designRows(_ frame: String) -> Batch { on { read(exact_design_rows(rt, write(frame))) } }
     /// The design digest the running app runs; nil before boot.
@@ -926,8 +933,8 @@ package final class Runtime {
         }
     }
     package func setModes(_ pins: [String: String], check: Bool = false) -> Batch { on { read(exact_set_mode(rt, write((check ? "?" : "") + pins.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")))) } }
-    package func setDisplayScale(_ scale: Double) -> Batch { on { read(exact_set_display_scale(rt, scale)) } }
-    package func setPlace(locale: String, timeZone: String, seed: UInt64, formatLocale: String = "") -> Batch { on { read(exact_set_place(rt, write(locale + "\0" + timeZone + "\0" + String(seed) + "\0" + formatLocale)) ) } }
+    package func setDisplayScale(_ scale: Double) -> Batch { on(layout: true) { read(exact_set_display_scale(rt, scale)) } }
+    package func setPlace(locale: String, timeZone: String, seed: UInt64, formatLocale: String = "") -> Batch { on(layout: true) { read(exact_set_place(rt, write(locale + "\0" + timeZone + "\0" + String(seed) + "\0" + formatLocale)) ) } }
     package func listIndex(_ view: UInt32, key: String) -> Int? {
         return on(busy: nil) {
             let n = write(key)
@@ -943,11 +950,11 @@ package final class Runtime {
             return String(decoding: Data(bytes: exact_out(rt), count: Int(len)), as: UTF8.self)
         }
     }
-    package func insets(top: CGFloat, right: CGFloat, bottom: CGFloat, left: CGFloat) -> Batch { on { read(exact_insets(rt, Float(top), Float(right), Float(bottom), Float(left))) } }
+    package func insets(top: CGFloat, right: CGFloat, bottom: CGFloat, left: CGFloat) -> Batch { on(layout: true) { read(exact_insets(rt, Float(top), Float(right), Float(bottom), Float(left))) } }
     /// The layout regions' insets (LLP 1123 D10): twenty, or none when every region is the safe area.
     package func regions(_ insets: [CGFloat]?) -> Batch {
         let values = (insets ?? []).map(Float.init)
-        return on { read(values.withUnsafeBufferPointer { exact_regions(rt, $0.baseAddress, UInt32($0.count)) }) }
+        return on(layout: true) { read(values.withUnsafeBufferPointer { exact_regions(rt, $0.baseAddress, UInt32($0.count)) }) }
     }
     /// The title-bar area beside the window's controls (Window Controls
     /// Overlay): x, y, width, height, or none, when every `titlebar-area-*` is undefined.
@@ -996,18 +1003,18 @@ package final class Runtime {
             withUnsafeBytes(of: word.littleEndian) { bytes.append(contentsOf: $0) }
         }
         bytes.append(change.blocks)
-        return on { read(exact_view(rt, write(bytes))) }
+        return on(layout: true) { read(exact_view(rt, write(bytes))) }
     }
 
     package func tick(now: Double, frame: Double? = nil) -> Batch { on { read(frame.map { exact_tick_at(rt, now, $0) } ?? exact_tick(rt, now)) } }
-    package func scheme(dark: Bool) -> Batch { on { read(exact_scheme(rt, dark ? 1 : 0)) } }
-    package func viewScheme(_ view: UInt32, dark: Bool) -> Batch { on { read(exact_view_scheme(rt, view, dark ? 1 : 0)) } }
+    package func scheme(dark: Bool) -> Batch { on(layout: true) { read(exact_scheme(rt, dark ? 1 : 0)) } }
+    package func viewScheme(_ view: UInt32, dark: Bool) -> Batch { on(layout: true) { read(exact_view_scheme(rt, view, dark ? 1 : 0)) } }
 
     /// Host intrinsic sizes (nil clears one), under one layout.
     package func intrinsics(_ sizes: [(UInt32, CGSize?)]) -> Batch {
         HostPhases.shared.count(.intrinsicReports, by: sizes.count)
         HostPhases.shared.count(.intrinsicLayoutRequests)
-        return on {
+        return on(layout: true) {
             var bytes = Data(capacity: sizes.count * 12)
             for (view, size) in sizes {
                 for word in [view, Float(size?.width ?? 0).bitPattern, Float(size?.height ?? 0).bitPattern] {
@@ -1022,7 +1029,7 @@ package final class Runtime {
     package func deliverySync() -> Batch { on { read(exact_delivery_sync(rt)) } }
     /// The returned JSON is copied before the runtime output buffer is reused.
     package func textReady(index: UInt32, generation: UInt32, revision: UInt64) -> Batch {
-        return on {
+        return on(layout: true) {
             read(exact_text_ready(rt, index, generation, revision))
         }
     }
@@ -1071,6 +1078,7 @@ package final class Runtime {
     /// A line for the runner's journal (LLP 1012 §3): what this host refused, and why.
     /// An app module's topic changed (LLP 1024): a notification (T5).
     package func appChanged(_ topic: Data) {
+        if Thread.isMainThread { beforeEvent?() }
         let rt = rt
         Owner.shared.notify {
             topic.withUnsafeBytes { exact_app_changed(rt, $0.bindMemory(to: UInt8.self).baseAddress, topic.count) }
