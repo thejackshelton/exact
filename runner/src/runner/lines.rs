@@ -113,22 +113,6 @@ pub(super) fn kept_waiting(resource: &str) -> String {
     )
 }
 
-/// One identifying argument a refused kept answer differs in: its 1-based
-/// position, its value, and the states and resources it reads, each with
-/// its value (LLP 1027.005 D3, 2026-11-13).
-pub(super) fn kept_argument(n: usize, value: &str, inputs: &[String]) -> String {
-    if inputs.is_empty() {
-        text!("identifying argument {} is {}", n, shortened(value))
-    } else {
-        text!(
-            "identifying argument {} is {}, reading {}",
-            n,
-            shortened(value),
-            inputs.join(" and ")
-        )
-    }
-}
-
 /// A kept answer the fresh one contradicts (LLP 1027 D4, LLP 1102 §3.17).
 pub(super) fn kept_contradicted(resource: &str) -> String {
     text!(

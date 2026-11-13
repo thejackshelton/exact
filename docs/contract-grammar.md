@@ -557,10 +557,12 @@ can still appear in an ordinary assignment.
 
 A resource's optional `with` supplies one or more request context expressions,
 after its call arguments and before `as shape`. The source receives both lists
-in order; a change to either asks again. Only admission of an eligible persisted
-answer at boot compares the call arguments alone (LLP 1027.005), and so does
-`current` (below). An empty call is valid; an empty `with` is not. `else` keeps
-its place after the shape.
+in order; a change to either asks again. Admission of an eligible persisted
+answer compares the call arguments alone. For a source unready at boot, its
+first identity match may admit the entry after readiness (LLP 1027.005 D3 and
+D5 as amended).
+`current` also compares the call arguments alone (below). An empty call is valid;
+an empty `with` is not. `else` keeps its place after the shape.
 
 A resource's optional `when cond`, before `as shape`, asks it only while `cond`, a
 `bool`, holds (LLP 1161.002; `type-when-not-bool`). While it is false the resource
@@ -569,7 +571,8 @@ is idle: nothing is asked, a request in flight is let go (an upload's goes on),
 nothing. It keeps the value it showed, which is no longer an answer: `current` is
 false. When `cond` turns true the resource is asked again, forced, even at the
 arguments it had, and is current once that answer lands. A resource idle at boot
-shows its placeholder. A resource over a list takes no `when`
+shows its placeholder, except that a host with persisted kept answers retains a
+seeded value as not current until the gate opens (LLP 1161.002 §7). A resource over a list takes no `when`
 (`syntax-resource-for-when`).
 
 A resource over a list, `resource r = source(x) for x in list as shape S`,

@@ -1086,13 +1086,26 @@ those fetches as a lost connection, so the banner says "You're offline".
 
 `with` takes one or more expressions, before `as shape`, and appends them to the
 source's arguments. All arguments still trigger re-asks and identify live
-requests. Only an eligible persisted answer admitted while the source is unready
-at boot matches the call arguments alone; it can then stand while activation is
-pending. Without `with`, every argument identifies that kept answer. Keep
-account/tenant IDs and representation choices in the call, credentials below
-the seam, and use `refresh`/`refreshes` for counters whose only purpose is another
-ask. The default web JS target keeps no persisted resource answers
+requests. On a launch whose source is unready at boot, an eligible persisted
+answer matches the call arguments alone and can stand while revalidation is
+pending, including when the identity first matches after source readiness.
+Without `with`, every argument identifies that kept answer. Keep account/tenant
+IDs and representation choices in the call, credentials below the seam, and use
+`refresh`/`refreshes` for counters whose only purpose is another ask. The default web JS target keeps no persisted resource answers
 (LLP 1027.005).
+
+To show account data on the first frame, its non-secret account id must come
+from `persist` state or a store-reading resource's kept answer. If a mutation
+returns the id, copy it into `persist` state for the next launch. When an id
+starts empty or its resource has no admitted device answer, the boot entry
+waits: its first known match can show the kept answer, even after source
+readiness, while revalidation is pending. A known different identity, a fresh
+answer replacing the entry, or forgetting it consumes that opportunity. An
+admitted seed that loses its identity is never readmitted. A compatible development
+reload preserves consumed eligibility, waiting entries and admitted seeds. An
+admitted seed stays stale, keeps its identity and sleep history, and is asked
+again. The journal says when an entry is still waiting; once a known mismatch consumes it, the
+journal names the differing input and its current value.
 
 Resource inputs are not asynchronous prerequisites, and HTTP request lanes do
 not make resources depend on one another. A resource that reads another resource

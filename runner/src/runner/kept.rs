@@ -5,9 +5,12 @@
 //! pixel — and the runner asks again at `data_ready`.
 //!
 //! Kept as the identifying arguments' canonical list followed by the answer's
-//! canonical bytes, each decoded as it was encoded; a kept answer whose arguments no longer match, whose
-//! bytes no longer decode, or whose value no longer fits the declared shape
-//! is simply not used, and the compiled empty-store placeholder stands.
+//! canonical bytes, each decoded as it was encoded. A kept answer waits while
+//! an identifying argument is `""`, `none` or read from a store reader still
+//! on its compiled value or placeholder, and the first known match admits it
+//! in that launch (LLP 1027.005 D3). One whose arguments are known and differ,
+//! whose bytes no longer decode, or whose value no longer fits the declared
+//! shape is not used, and the compiled empty-store placeholder stands.
 
 use super::{CallOrigin, DataSource, ResourceState, Runner, RunnerError};
 use crate::store::Store;
@@ -36,9 +39,8 @@ pub(super) struct Keeping {
     pub(super) too_big: Vec<usize>,
     /// The resources said to be kept under an argument of this launch's own, once each
     pub(super) of_launch: Vec<usize>,
-    /// The kept answers a settlement refused, set waiting or showed once
-    /// their identity matched, by resource, with the line that says so:
-    /// journaled when its commit stands, so a refusal is never silent.
+    /// Kept answers this boot refused, by resource, with why: journaled
+    /// with the ones it shows, so a refusal is never silent.
     pub(super) refused: Vec<(usize, String)>,
     /// Whether a module source declared `kept` keeps its answers (LLP
     /// 1133.015 D4): always, but in a private session.
@@ -69,6 +71,29 @@ pub(super) fn kept_module(plan: &exact_plan::Plan, i: usize) -> bool {
 pub(super) fn waits_for_module(plan: &exact_plan::Plan, source: &str) -> bool {
     !exact_plan::runner_owned_source(source) && plan.fetch_named(source).is_none()
 }
+
+pub(super) fn carries_entry(
+    plan: &exact_plan::Plan,
+    carried: &crate::Carried,
+    resource: &str,
+) -> bool {
+    plan.resources.iter().enumerate().any(|(i, r)| {
+        plan.str(r.name) == resource
+            && (carried
+                .store_readers
+                .iter()
+                .any(|(n, s)| n == resource && s == plan.str(r.source))
+                || kept_module(plan, i)
+                    && carried
+                        .kept_modules
+                        .iter()
+                        .any(|(n, s)| n == resource && s == plan.str(r.source)))
+    })
+}
+
+#[path = "kept_admission.rs"]
+mod admission;
+pub(super) use admission::Candidate;
 
 /// The kept entries in `names` that no resource of `plan` seeds. A cold
 /// boot seeds a first frame only from the kept answers of a surface record,
@@ -188,6 +213,23 @@ pub(super) fn decode(bytes: &[u8]) -> Option<(Vec<Value>, Value)> {
 }
 
 impl<D: DataSource> Runner<D> {
+    /// Whether resource `i`'s identifying call arguments (not its `with`
+    /// context) read, directly or through derives, a store-reading resource
+    /// still on its fallback, its compiled answer or placeholder, before its
+    /// source is ready: its identity is not yet known, so its kept answer
+    /// must wait. An account resource with no kept answer of its own shows
+    /// its placeholder (`did: ""`), and that empty id would match whatever
+    /// another launch kept (LLP 1027.005 D3, 2026-10-10). Kept seeds,
+    /// carried and checkpoint answers and non-store values are known.
+    pub(super) fn identity_unknown(&self, i: usize, states: &[Option<ResourceState>]) -> bool {
+        self.identity_reads(i, |r| {
+            self.resources[r].store_reader
+                && states[r]
+                    .as_ref()
+                    .is_some_and(|s| s.placeholder || s.value.is_compiled())
+        })
+    }
+
     /// Whether resource `i`'s identifying arguments read a resource of a
     /// source declared in Contract, a list's included, which no kept answer
     /// seeds.
@@ -202,43 +244,28 @@ impl<D: DataSource> Runner<D> {
     /// through derives, a resource `hit` names.
     fn identity_reads(&self, i: usize, hit: impl Fn(usize) -> bool) -> bool {
         use crate::instance::Input;
-        self.identity_inputs(
-            i,
-            |_| true,
-            |input| match input {
-                Input::Resource(r) | Input::PendingResource(r) | Input::FailedResource(r) => hit(r),
-                _ => false,
-            },
-        )
-    }
-
-    /// Whether `visit` returned true for an input that resource `i`'s
-    /// identifying arguments the `arg` filter passes read, directly or
-    /// through derives; it is not called again once it has.
-    pub(super) fn identity_inputs(
-        &self,
-        i: usize,
-        arg: impl Fn(usize) -> bool,
-        mut visit: impl FnMut(crate::instance::Input) -> bool,
-    ) -> bool {
-        use crate::instance::Input;
         let deps = self.sites.deps();
         let row = self.resource_row(i).clone();
         let identity = row.args.len as usize - usize::from(row.context);
-        let mut work: Vec<_> = (row.args.iter().take(identity).enumerate())
-            .filter(|&(k, _)| arg(k))
-            .map(|(_, a)| deps.reads_of(&self.plan, self.plan.arg(a).expr))
+        let mut work: Vec<_> = row
+            .args
+            .iter()
+            .take(identity)
+            .map(|a| deps.reads_of(&self.plan, self.plan.arg(a).expr))
             .collect();
         let mut derives = vec![false; self.plan.derives.len()];
         while let Some(reads) = work.pop() {
             for input in deps.inputs(&reads) {
                 match input {
+                    Input::Resource(r) | Input::PendingResource(r) | Input::FailedResource(r)
+                        if hit(r) =>
+                    {
+                        return true;
+                    }
                     Input::Derive(d) if !derives[d] => {
                         derives[d] = true;
                         work.push(deps.derives[d].clone());
                     }
-                    Input::Derive(_) => {}
-                    input if visit(input) => return true,
                     _ => {}
                 }
             }
@@ -292,8 +319,8 @@ impl<D: DataSource> Runner<D> {
         }
     }
 
-    /// Journal the kept answers refused by a settlement that stood: at
-    /// boot, and at a later commit before readiness (an identity changed).
+    /// Journal kept-answer refusals from a standing commit, including
+    /// boot and commits after source readiness.
     pub(super) fn journal_refused(&mut self) {
         for (_, line) in std::mem::take(&mut self.keeping.refused) {
             self.log(line);
@@ -307,7 +334,7 @@ impl<D: DataSource> Runner<D> {
     pub(super) fn kept_seed(&mut self, i: usize) -> Option<(Vec<Value>, Value)> {
         let row = self.resource_row(i).clone();
         // @ref LLP 1156.005 D4 — boot forgot any entry kept before it was.
-        if row.transient {
+        if row.transient || self.resources[i].kept_consumed {
             return None;
         }
         let name = self.plan.str(row.name);
@@ -357,6 +384,7 @@ impl<D: DataSource> Runner<D> {
                 continue;
             }
             if let Some((args, value)) = self.kept_seed(i) {
+                self.remember_kept(i, &args);
                 self.resources[i].state = Some(ResourceState {
                     inspection_generation: 0,
                     args,
@@ -364,6 +392,7 @@ impl<D: DataSource> Runner<D> {
                     store_revision: self.store.revision(),
                     placeholder: false,
                     kept_seed: true,
+                    provisional_kept: false,
                     answered_for: None,
                     asleep: false,
                     slept: false,
@@ -393,6 +422,7 @@ impl<D: DataSource> Runner<D> {
                         store_revision: self.store.revision(),
                         placeholder: false,
                         kept_seed: true,
+                        provisional_kept: false,
                         answered_for: None,
                         asleep: false,
                         slept: false,
@@ -419,6 +449,7 @@ impl<D: DataSource> Runner<D> {
             let Some((args, value)) = self.kept_seed(i) else {
                 continue;
             };
+            self.remember_kept(i, &args);
             self.resources[i].state = Some(ResourceState {
                 inspection_generation: 0,
                 args,
@@ -426,11 +457,13 @@ impl<D: DataSource> Runner<D> {
                 store_revision: self.store.revision(),
                 placeholder: false,
                 kept_seed: true,
+                provisional_kept: false,
                 answered_for: None,
                 asleep: false,
                 slept: false,
                 origin: 0,
             });
+            self.resources[i].stale = true;
             self.ask_at_launch(i);
         }
     }
@@ -438,11 +471,20 @@ impl<D: DataSource> Runner<D> {
     /// Keep a store-reading resource's fresh answer for the next boot's
     /// first frame (LLP 1027 D4), when this source may not be ready then.
     pub(super) fn keep_answer(&mut self, i: usize, args: &[Value], value: &Value) {
+        // A fresh answer for the candidate's identity supersedes it even
+        // when this answer cannot be kept (for example, it is too large).
+        if self.resources[i]
+            .kept_candidate
+            .as_ref()
+            .is_some_and(|c| args.starts_with(&c.args))
+        {
+            self.resources[i].kept_candidate = None;
+            self.resources[i].kept_consumed = true;
+        }
         // An element of a resource over a list is the launch's to ask.
         if self.member(i).is_some() {
             return;
         }
-        self.answered_waiting(i, args, false);
         let surface = self.keeping.modules
             && kept_surface(&self.plan, i)
             && crate::surface_record::surface_name(&self.plan, self.resource_row(i))
@@ -453,20 +495,19 @@ impl<D: DataSource> Runner<D> {
         {
             return;
         }
-        // @ref LLP 1039 D3 / LLP 1030 D7 — a runner fact's answer is never
-        // kept, but a surface record's (`kept_surface`).
+        // @ref LLP 1039 D3 / LLP 1030 D7 — runner facts are never kept answers.
         // @ref LLP 1162.001 D4 — nor is a declared source's, nor one whose
         // identifying arguments read a declared resource, a kept module
-        // source's included: a launch with no rendered page starts the
-        // declared resource on its placeholder, so such a kept answer would
-        // not fit (LLP 1027.005 D3), and an older one is forgotten.
+        // source's included: a launch with no rendered page starts that
+        // resource on its placeholder, so such a kept answer would not fit
+        // (LLP 1027.005 D3), and an older one is forgotten.
         if !surface && !waits_for_module(&self.plan, self.plan.str(self.resource_row(i).source)) {
             return;
         }
         if !surface && self.identity_reads_declared(i) {
-            self.answered_waiting(i, args, true);
             self.store
                 .forget_kept(&kept_name(self.plan.str(self.resource_row(i).name)));
+            self.resources[i].kept_candidate = None;
             return;
         }
         // @ref LLP 1027.005 D6 — context reaches the source but does not
@@ -503,8 +544,8 @@ impl<D: DataSource> Runner<D> {
         if !fits(args, value) {
             // An older answer kept for it would show stale at the next launch: forget it (with the commit), and
             // say so once
-            self.answered_waiting(i, args, true);
             self.store.forget_kept(&name);
+            self.resources[i].kept_candidate = None;
             if !self.keeping.too_big.contains(&i) {
                 self.keeping.too_big.push(i);
                 let line = format!(
@@ -517,10 +558,16 @@ impl<D: DataSource> Runner<D> {
             return;
         }
         self.say_of_launch(i, args);
-        self.answered_waiting(i, args, true);
         let entry = encode(args, value);
+        if self.resources[i].kept_candidate.as_ref().is_some_and(|c| {
+            use sha2::{Digest, Sha256};
+            c.entry != <[u8; 32]>::from(Sha256::digest(&entry))
+        }) {
+            self.resources[i].kept_candidate = None;
+        }
         self.make_room(&name, entry.len());
         self.store.keep(&name, entry);
+        self.resources[i].kept_consumed = false;
     }
 
     /// Forget other kept answers, the longest first, until `len` more bytes
@@ -700,6 +747,7 @@ impl<D: DataSource> Runner<D> {
         if !change.any {
             return Ok(change);
         }
+        self.validate_kept_candidates();
         for i in 0..self.slots.len() {
             if self.plan.slots[i].persist {
                 let initial = self.eval(self.plan.slots[i].init, &[], &[]).map_err(|e| {

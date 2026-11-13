@@ -76,8 +76,10 @@ For private data, gate by principal and auth generation, including after an awai
 before caching: A → B → A must reject the first A's answers. Await prerequisites
 in the source; dependencies do not sequence requests ([guide](../contract-for-agents.md#data-requests-and-side-effects)).
 
-**Across launches:** reading `native.available` or calling `native.call` makes a
-resource read device state; its answer can be kept and shown before the next fetch.
-Resolve a launch endpoint once in a mount mutation, then pass it as a resource
-argument; keep native access out of fetch sources. Copy [a native module](native-module.md).
-`with` controls boot admission, not persistence. `state.resourceStatus` explains retained answers.
+**Across launches:** restore the account's non-secret id from `persist` or a store
+reader's kept answer. A source unready at boot may admit its waiting entry
+on the first known identity match, after readiness. `with` controls admission,
+not persistence; `state.resourceStatus` explains retention.
+
+`native.available` and `native.call` can make answers kept; read launch
+configuration in a mount mutation ([native module](native-module.md)).

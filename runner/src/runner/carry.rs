@@ -1,6 +1,9 @@
 //! State carried across a restart (LLP 1007 §6, LLP 1027 D5).
 use exact_plan::Value;
 
+/// Waiting kept entries: resource, source, identity, digest and sleep history.
+pub type KeptCandidates = Vec<(String, String, Vec<Value>, [u8; 32], bool)>;
+
 /// What survives a reload: slots whose names/types still fit, settled
 /// resources with matching sources, arguments and logic identity, app secrets, and
 /// the clock. A logic edit re-asks resources rather than preserving old answers.
@@ -21,16 +24,21 @@ pub struct Carried {
     pub panels: crate::instance::tabs::CarriedPanels,
     /// Resource name → (source name, arguments, value).
     pub resources: Vec<(String, String, Vec<Value>, Value)>,
-    /// Kept entries waiting for their identifying arguments (LLP 1027.005
-    /// D3, 2026-11-13): (resource name, source name, identifying arguments,
-    /// digest of the stored entry).
-    pub waiting: Vec<(String, String, Vec<Value>, u64)>,
     /// The resources whose answer came from a stream still open: a
     /// replacement that takes the answer shows it and asks again, opening
     /// the stream anew, since the old one ends with the runner that had it.
     pub streams: Vec<String>,
     /// (Resource name, source name) pairs whose answer depends on the store.
     pub store_readers: Vec<(String, String)>,
+    /// Resources explicitly kept by their module, qualified by source.
+    pub kept_modules: Vec<(String, String)>,
+    /// Unadmitted kept entries: resource, source, identity, digest and sleep history.
+    pub kept_candidates: KeptCandidates,
+    /// Consumed boot eligibility, by resource and source; store bytes may remain.
+    pub kept_consumed: Vec<(String, String)>,
+    /// Admitted provisional seeds: resource, source, identity, value and sleep
+    /// history. They remain stale and are asked again by the replacement.
+    pub kept_seeds: Vec<(String, String, Vec<Value>, Value, bool)>,
     /// Of `store_readers`, those asked in the run that carried them, and
     /// whether each read what the store holds: one that only drew randomness
     /// is not asked again by a store change after the reload either
@@ -95,7 +103,6 @@ impl<D: super::DataSource> super::Runner<D> {
                     })
                 })
                 .collect(),
-            waiting: self.carry_waiting(),
             streams: (self.pending.iter())
                 .filter(|p| !p.in_flight())
                 .filter_map(|p| match p.target {
@@ -114,6 +121,65 @@ impl<D: super::DataSource> super::Runner<D> {
                     (
                         self.plan.str(resource.name).to_string(),
                         self.plan.str(resource.source).to_string(),
+                    )
+                })
+                .collect(),
+            kept_modules: self
+                .resource_rows()
+                .take(self.declared_resources().len())
+                .enumerate()
+                .filter(|(i, _)| super::kept::kept_module(&self.plan, *i))
+                .map(|(_, r)| {
+                    (
+                        self.plan.str(r.name).to_string(),
+                        self.plan.str(r.source).to_string(),
+                    )
+                })
+                .collect(),
+            kept_candidates: self
+                .resource_rows()
+                .take(self.declared_resources().len())
+                .enumerate()
+                .filter_map(|(i, r)| {
+                    let candidate = self.resources[i].kept_candidate.as_ref()?;
+                    Some((
+                        self.plan.str(r.name).to_string(),
+                        self.plan.str(r.source).to_string(),
+                        candidate.args.clone(),
+                        candidate.entry,
+                        candidate.slept
+                            || self.resources[i].state.as_ref().is_some_and(|s| s.slept),
+                    ))
+                })
+                .collect(),
+            kept_consumed: self
+                .resource_rows()
+                .take(self.declared_resources().len())
+                .enumerate()
+                .filter(|(i, _)| self.resources[*i].kept_consumed)
+                .map(|(_, r)| {
+                    (
+                        self.plan.str(r.name).to_string(),
+                        self.plan.str(r.source).to_string(),
+                    )
+                })
+                .collect(),
+            kept_seeds: self
+                .resource_rows()
+                .take(self.declared_resources().len())
+                .enumerate()
+                .filter_map(|(i, r)| {
+                    let state = self.resources[i].state.as_ref()?;
+                    (state.provisional_kept && self.resources[i].stale && !self.written(i)).then(
+                        || {
+                            (
+                                self.plan.str(r.name).to_string(),
+                                self.plan.str(r.source).to_string(),
+                                state.args.clone(),
+                                state.value.get(&self.plan).clone(),
+                                state.slept,
+                            )
+                        },
                     )
                 })
                 .collect(),
