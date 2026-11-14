@@ -968,3 +968,26 @@ test('a locked Gradle failure keeps its output and names lock repair only for de
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('an Android picker answer carries local file bytes and names to either carrier', async () => {
+  const { sessionInput } = await import('./agent-input.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'exact-agent-pick-'));
+  try {
+    const names = ['notes with spaces.txt', 'photo.png', ...(process.platform === 'win32' ? [] : ['foo\\bar.txt'])];
+    const paths = names.map(name => resolve(dir, name));
+    const bytes = [Buffer.from('notes\n'), readFileSync(resolve(import.meta.dir, 'fixtures/picker/photo.png')), Buffer.from('backslash\n')];
+    paths.forEach((path, i) => writeFileSync(path, bytes[i]));
+    const calls = [], s = {
+      op: async req => {
+        if (req.op === 'state') return { pending: [{ ticket: 7, device: { capability: 'pick' } }] };
+        calls.push(req); return {};
+      },
+      landed: async r => r,
+    };
+    Object.assign(s, sessionInput(s, { carrier: {}, host: 'android' }));
+    await s.answer('type', '@7', paths.join('\n'));
+    expect(calls).toEqual([{ op: 'type', ticket: 7, text: paths.join('\n') + '\n',
+      files: names.map((name, i) => ({ name, bytes: bytes[i].toString('base64') })),
+    }]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
