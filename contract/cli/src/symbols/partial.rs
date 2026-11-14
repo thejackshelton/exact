@@ -191,9 +191,11 @@ pub(super) fn file_by_file(
         graph.ids.clear();
         graph.ambiguous.clear();
         graph.hidden = shadows(&file, &hidden);
+        let aliases = super::types::aliases(&types.shapes, editor);
         let mut r = Resolver {
             file: &file,
             types: &types,
+            aliases: &aliases,
             typed: false,
             left_out,
             whole: false,

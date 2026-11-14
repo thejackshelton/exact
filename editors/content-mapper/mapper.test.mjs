@@ -119,6 +119,19 @@ test('a project reached through a linked directory imports its other file beside
   } finally { rmSync(link, { force: true }); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a shape TypeScript cannot name is declared by the alias the compiler\'s types write it as', async () => {
+  const bin = process.env.EXACT_CONTRACT ?? resolve(root, 'target/debug/contract');
+  if (!existsSync(bin)) { console.log('skipped: no contract binary'); return; }
+  const { transform } = await import('./mapper.js');
+  const dir = mkdtempSync(resolve(root, 'target/content-mapper-test-'));
+  const app = 'shape A-B\n  x: number\nshape A_B\n  y: string\nshape class\n  z: number\nfn first(value: A-B): number = value.x\nfn second(value: A_B, other: class): string = value.y\ncomponent App\n  view\n    text "x"\n';
+  try {
+    const { text } = transform(resolve(dir, 'app.contract'), app, { contract: bin });
+    for (const line of ['type A_B_ = { x: number };', 'type A_B = { y: string };', 'type class_ = { z: number };', ': (value: A_B_) => number }', ': (value: A_B, other: class_) => string }']) expect(text).toContain(line);
+    expect(text).not.toMatch(/type class =|: A-B\b/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('a file an app uses from a directory below it is built with that app', async () => {
   const bin = process.env.EXACT_CONTRACT ?? resolve(root, 'target/debug/contract');
   if (!existsSync(bin)) { console.log('skipped: no contract binary'); return; }
