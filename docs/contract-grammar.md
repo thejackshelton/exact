@@ -782,6 +782,7 @@ step          = "tap" "midi" STRING ( HEX { HEX } | "clock" NUMBER NUMBER ) NL
               | "expect" "no" "failures" NL           (* nothing failed that the test did not arrange *)
               | "expect" "tree" ( "has" | "missing" ) STRING NL
               | "expect" ( "disabled" | "enabled" ) STRING NL  (* a control's `disabled` (LLP 1116.010 D3) *)
+              | "expect" "focused" STRING NL         (* the node that holds the keyboard focus *)
               | "expect" "refusal" STRING NL          (* one observed refusal of the named mutation slot *)
               | "expect" "text" STRING "==" STRING NL
               | "expect" "state" IDENT { "." ( IDENT | NUMBER ) }
@@ -910,7 +911,9 @@ or message as well.
 Targets are driver test ids. `expect disabled "send"` (`enabled`) reads the control's
 `disabled`, which every host's tree carries (LLP 1116.010 D3). A `tap` on a disabled control
 does nothing, and fails its step on every host, `send is disabled`: say what the app refuses
-with `expect disabled`, then `expect enabled` once what enables it has happened. Each test is a session of its own, opened with its
+with `expect disabled`, then `expect enabled` once what enables it has happened. `expect
+focused "picker"` passes when that node holds the keyboard focus, as every host's tree marks it
+(`[focused]` in `agent <host> tree`): after a key moves the focus, or a dialog returns it. Each test is a session of its own, opened with its
 launch lines: `size 1200x800`, `epoch "2026-09-21T12:00:00Z"`, `time-zone
 "America/New_York"`, `locale "fr-FR"` and `seed 7` are the driver's `--size`,
 `--epoch`, `--time-zone`, `--locale` and `--seed`, so they lead the test's steps,

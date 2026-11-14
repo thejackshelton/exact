@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { backendFetchPrefixes, churnLines, disabledExpectation, nativeFetchOrigins, NO_FAILURES, perfExpectation, pickHint, propertyHolds, testMutationClock, refusalExpectation, refuseDisabled, runTests, stateHolds, serverRequest, testScope, textExpectation, treeExpectation, unarranged } from './agent-test.mjs';
+import { backendFetchPrefixes, churnLines, disabledExpectation, focusedExpectation, nativeFetchOrigins, NO_FAILURES, perfExpectation, pickHint, propertyHolds, testMutationClock, refusalExpectation, refuseDisabled, runTests, stateHolds, serverRequest, testScope, textExpectation, treeExpectation, unarranged } from './agent-test.mjs';
 import { axFindings } from './agent-ax.mjs';
 import { withEpoch } from './agent-launch.mjs';
 import { serveBuildTree } from '../host/web/serve.mjs';
@@ -237,6 +237,15 @@ test('present means shown in the app; missing is the tree\'s', () => {
   expect(treeExpectation(nodes, 'gone', true).message).toBe('expected testId "gone" present, it was absent');
   expect(treeExpectation(nodes, 'gone', false)).toBeNull();
   expect(treeExpectation(nodes, 'tagline', false).message).toBe('expected testId "tagline" absent, it was present');
+});
+
+test('expect focused reads the node every host\'s tree marks focused, and names what holds the focus instead', () => {
+  const tree = [{ id: 1, type: 'Pressable', props: { testId: 'picker' } }, { id: 2, type: 'Pressable', props: { testId: 'row' }, focused: true }, { id: 3, type: 'Pressable', props: { testId: 'row' } }, { id: 4, type: 'View', props: {} }];
+  expect(focusedExpectation(tree, 'row')).toBeNull();
+  expect(focusedExpectation(tree, 'picker').message).toBe('expected "picker" focused, "row" has it');
+  expect(focusedExpectation(tree, 'gone').message).toBe('expected "gone" focused, no view carries that testId');
+  expect(focusedExpectation([tree[0], { ...tree[3], focused: true }], 'picker').message).toBe('expected "picker" focused, View#4 has it');
+  expect(focusedExpectation([tree[0]], 'picker').message).toBe('expected "picker" focused, nothing has the focus');
 });
 
 // LLP 1116.010 D3 (chat-rooms and password-generator, round 12): a disabled control is asserted, and pressing one fails the step.

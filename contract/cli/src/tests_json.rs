@@ -322,6 +322,10 @@ fn step_json(step: &Step, s: &mut String) {
             q(target, s);
             s.push_str(&format!(",\"disabled\":{disabled}"));
         }
+        Step::ExpectFocused { target, .. } => {
+            s.push_str("{\"op\":\"expect-focused\",\"target\":");
+            q(target, s);
+        }
         Step::ExpectText { target, value, .. } => {
             s.push_str("{\"op\":\"expect-text\",\"target\":");
             q(target, s);

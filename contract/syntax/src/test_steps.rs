@@ -312,6 +312,14 @@ pub enum Step {
         /// Where.
         span: Span,
     },
+    /// `expect focused "testId"`: the node holds the keyboard focus, as each host's tree
+    /// reports it (the web's `document.activeElement`, the platform's first responder).
+    ExpectFocused {
+        /// The node, by `testId`.
+        target: String,
+        /// Where.
+        span: Span,
+    },
     /// `expect text "testId" == "value"`: the node's text — its `text` prop,
     /// else its descendants' text in order (the web's `textContent`), else a
     /// field's value.

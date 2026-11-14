@@ -24,7 +24,7 @@ test "a repeat is refused and keeps its text; the list survives a relaunch"
 | `tap "id"` (`… contextmenu`) | Presses (long-presses) it; `tap "Milk"`: by text or label. A disabled control fails the step. |
 | `type "id" "text"`, `type "id" key "Enter"` | Sets a value (a `select`'s, a date `"2026-10-10"`, a checkbox `"true"`); presses a key. |
 | `expect text "id" == "…"` | Its text, else its value, else its descendants' text. |
-| `expect tree has "id"` (`missing`) · `expect disabled "id"` (`enabled`) · `expect state groceries.0 .title == "Eggs"` | In the tree or not · a control's `disabled` · a state, derive or resource. |
+| `expect tree has "id"` (`missing`) · `expect disabled "id"` (`enabled`) · `expect focused "id"` · `expect state draft == ""` | In the tree or not · its `disabled` · focused · a state, derive or resource. |
 | `clock data` · `clock settle` · `clock +5000` · `reload` | Lands replies · ends transitions · moves virtual time · reloads on the same storage and date: web at its URL, native at a path or scheme `--url`, else its cold launch location. |
 | `back` | The platform's Back: cancels a dialog, else dismisses a sheet, else pops the route. |
 | `fail fetch "<prefix>"`, `pass fetch …` | A lost connection there, then none. |

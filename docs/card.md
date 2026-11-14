@@ -95,7 +95,7 @@ test steps (app.test.contract; every other form: docs/contract-grammar.md)
   tap "id" (… contextmenu)
   type "id" "text", type "id" key "Enter"
   expect text "id" == "…"
-  expect tree has "id" (missing) · expect disabled "id" (enabled) · expect state groceries.0 .title == "Eggs"
+  expect tree has "id" (missing) · expect disabled "id" (enabled) · expect focused "id" · expect state draft == ""
   clock data · clock settle · clock +5000 · reload
   back
   fail fetch "<prefix>", pass fetch …

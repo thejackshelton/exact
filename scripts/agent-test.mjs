@@ -82,6 +82,15 @@ export function disabledExpectation(nodes, target, disabled) {
   return readsDisabled(n) === disabled ? null : { message: `expected "${target}" ${word}, it was ${disabled ? 'enabled' : 'disabled'}` };
 }
 
+/** `expect focused <target>`: null when a node the target names holds the focus, which every host's tree marks
+ * (`focused`), else `{ message }` naming what holds it. */
+export function focusedExpectation(nodes, target) {
+  if (nodes.some((n) => n.props.testId === target && n.focused)) return null;
+  const holder = nodes.find((n) => n.focused);
+  const was = !targetNode(nodes, target) ? 'no view carries that testId' : !holder ? 'nothing has the focus' : `${holder.props.testId != null ? JSON.stringify(holder.props.testId) : `${holder.type}#${holder.id}`} has it`;
+  return { message: `expected "${target}" focused, ${was}` };
+}
+
 /** A press on a disabled control does nothing, and each host said so its own way (the web's silently, a native one in the words of the view
  * that took the touch), so a step that presses one fails the same on every host (LLP 1116.010 D3): the test of a refusal is `expect disabled`.
  * Context requests ignore disabled on containers and links, as HTML does; other non-press forms below bypass this guard. */
@@ -984,6 +993,11 @@ export async function runTests({ host, browser, file, plan, app, size, env, webD
           }
           case 'expect-disabled': {
             const f = disabledExpectation((await s.tree()).nodes, st.target, st.disabled);
+            if (f) await fail(`${at}: ${f.message}`);
+            break;
+          }
+          case 'expect-focused': {
+            const f = focusedExpectation((await s.tree()).nodes, st.target);
             if (f) await fail(`${at}: ${f.message}`);
             break;
           }

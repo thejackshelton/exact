@@ -1081,7 +1081,7 @@ impl Parser {
                         return self.err(
                             "syntax-expected-step",
                             format!(
-                                "`expect` reads `tree`, `text`, `state`, `disabled`, `enabled`, `refusal`, `sound`, `midi`, `wakelock`, `mediasession`, `perf`, or `no failures`, found {}",
+                                "`expect` reads `tree`, `text`, `state`, `disabled`, `enabled`, `focused`, `refusal`, `sound`, `midi`, `wakelock`, `mediasession`, `perf`, or `no failures`, found {}",
                                 describe(&other)
                             ),
                         )
@@ -1137,6 +1137,10 @@ impl Parser {
                             span,
                         }
                     }
+                    "focused" => Step::ExpectFocused {
+                        target: self.str_lit("a testId")?,
+                        span,
+                    },
                     "text" => {
                         let target = self.str_lit("a testId")?;
                         let other = match self.peek_kind() {
@@ -1214,12 +1218,14 @@ impl Parser {
                         // r32 t1 tried `expect value` for a field.
                         let hint = if other == "value" || other == "checked" {
                             "; `expect text` reads a control's value too (a checkbox with a `checked` binding reads `true` or `false`)"
+                        } else if other == "focus" {
+                            "; for the node that holds the focus, write `expect focused \"<testId>\"`"
                         } else {
                             ""
                         };
                         return self.err(
                             "syntax-expected-step",
-                            format!("`expect` reads `tree`, `text`, `state`, `disabled`, `enabled`, `refusal`, `sound`, `midi`, `wakelock`, `mediasession`, `perf`, or `no failures`, not `{other}`{hint}"),
+                            format!("`expect` reads `tree`, `text`, `state`, `disabled`, `enabled`, `focused`, `refusal`, `sound`, `midi`, `wakelock`, `mediasession`, `perf`, or `no failures`, not `{other}`{hint}"),
                         );
                     }
                 }

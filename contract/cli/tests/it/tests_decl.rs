@@ -763,6 +763,31 @@ fn a_test_asserts_that_a_control_is_disabled_or_enabled() {
 }
 
 #[test]
+fn a_test_asserts_which_node_has_the_focus() {
+    let src = "test \"t\"\n  type \"picker\" key \"Escape\"\n  expect focused \"picker\"\n";
+    let tests = contract::tests(src).unwrap();
+    assert!(matches!(&tests[0].steps[1], Step::ExpectFocused { target, .. } if target == "picker"));
+    let json = contract::tests_json(&tests);
+    assert!(
+        json.contains("{\"op\":\"expect-focused\",\"target\":\"picker\",\"line\":3}"),
+        "{json}"
+    );
+    let e = contract::tests("test \"t\"\n  expect focus \"picker\"\n").unwrap_err();
+    assert!(
+        e.to_string()
+            .contains("write `expect focused \"<testId>\"`"),
+        "{e}"
+    );
+    for src in [
+        "test \"t\"\n  expect focused picker\n",
+        "test \"t\"\n  expect focused\n",
+    ] {
+        let e = contract::tests(src).unwrap_err();
+        assert_eq!(e.span.line, 2, "{src}: {e}");
+    }
+}
+
+#[test]
 fn a_test_writes_through_the_apps_server_as_another_person() {
     // LLP 1116.006 D8: method, a path under the server the app calls (or a
     // whole URL), a JSON body that may span lines, and the persona.
