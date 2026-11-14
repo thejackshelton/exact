@@ -202,6 +202,18 @@ test('the compiler\'s warnings on an open contract are problems of warning sever
     assert.deepEqual(await problems('open', document('lib/row.contract', row(used))), [[[10, 6, 10, 12], 'lower-button-unlabelled', 'warning', 'contract']]);
     // A refusal is no warning: the compiler's errors are the content mapper's to show.
     assert.deepEqual(await problems('change', document('app.contract', app('      nope\n'))), []);
+    // Lines deleted while the compiler ran: the answer for the older text is dropped, and the newer text is still checked.
+    const live = { ...document('app.contract', ''), text: app(blank), getText() { const text = this.text; this.typed?.(); return text; }, lineAt(line) { const text = this.text.split('\n')[line]; if (text === undefined) throw new Error('Illegal value for `line`'); return { text }; } };
+    const edited = new Promise(done => { live.typed = () => { live.typed = undefined; live.text = 'component App\n'; done(Promise.all(listeners.change.map(l => l({ document: live })))); }; });
+    await Promise.all([...listeners.open.map(l => l(live)), edited]);
+    assert.deepEqual(shown.get('app.contract'), []);
+    live.text = app(blank);
+    assert.deepEqual(await problems('change', live), [[[7, 6, 7, 12], 'lower-button-unlabelled', 'warning', 'contract']]);
+    // A check that fails does not stop the ones after it.
+    const set = shown.set.bind(shown);
+    shown.set = () => { shown.set = set; throw new Error('once'); };
+    await assert.rejects(problems('change', live));
+    assert.deepEqual(await problems('change', live), [[[7, 6, 7, 12], 'lower-button-unlabelled', 'warning', 'contract']]);
     // Closed: its problems go.
     const closing = document('lib/row.contract', row(used));
     await Promise.all(listeners.close.map(l => l(closing)));

@@ -79,13 +79,13 @@ async function appOf(bin, file) {
   }
 }
 
-/** The compiler's warnings on a document as the editor holds it, as VS Code's problems. Its errors are left to the
+/** The compiler's warnings on a file whose text the editor holds, as VS Code's problems. Its errors are left to the
  * content mapper, which shows them through TypeScript. */
-async function warnings(vscode, bin, document) {
-  const file = document.fileName, app = await appOf(bin, file);
-  const found = await asked(bin, ['build', app ?? file, '--json', ...(app ? ['--stdin-as', file] : ['--stdin'])], document.getText());
+async function warnings(vscode, bin, file, text) {
+  const app = await appOf(bin, file), lines = text.split('\n');
+  const found = await asked(bin, ['build', app ?? file, '--json', ...(app ? ['--stdin-as', file] : ['--stdin'])], text);
   /** The compiler's column, which counts UTF-8 bytes, as the UTF-16 units VS Code counts. */
-  const units = (line, col) => Buffer.from(document.lineAt(line - 1).text).subarray(0, col - 1).toString().length;
+  const units = (line, col) => Buffer.from(lines[line - 1] ?? '').subarray(0, col - 1).toString().length;
   return (found ?? []).filter(e => e.severity === 'warning' && e.line > 0 && real(e.file) === real(file)).map(e => {
     const range = new vscode.Range(e.line - 1, units(e.line, e.col), e.line - 1, units(e.line, e.end_col ?? e.col + 1));
     return Object.assign(new vscode.Diagnostic(range, e.message, vscode.DiagnosticSeverity.Warning), { code: e.id, source: 'contract' });
@@ -99,14 +99,15 @@ function problems(vscode, state) {
   const bin = vscode.workspace.getConfiguration().get(COMPILER);
   if (!bin) return;
   const shown = vscode.languages.createDiagnosticCollection(LANGUAGE), latest = new Map(), compiling = new Map();
-  // One compile of a document at a time, and of its newest text only: a text typed over while it waited is skipped.
+  // One compile of a document at a time, and of its newest text only: a text typed over while it waited is skipped,
+  // and one typed over while it compiled is not shown. Its places are read in the text that was compiled.
   const check = document => {
     if (document.languageId !== LANGUAGE) return;
     const key = String(document.uri), turn = {};
     latest.set(key, turn);
-    const done = (compiling.get(key) ?? Promise.resolve()).then(async () => {
+    const done = (compiling.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
       if (latest.get(key) !== turn) return;
-      const found = await warnings(vscode, bin, document);
+      const found = await warnings(vscode, bin, document.fileName, document.getText());
       if (latest.get(key) === turn) shown.set(document.uri, found);
     });
     compiling.set(key, done);
