@@ -253,27 +253,6 @@ for (const [name, kind, file] of [['realworld', 'state'], ['realworld', 'action'
     expect(r.uses[1]).toBe(r.uses[0]);
   }, 120_000);
 
-test('an unsaved edit above a declaration keeps its importer\'s uses and its rename', async () => {
-  if (!ready()) return;
-  const row = 'component Row\n  props\n    label: string\n  view\n    text label\n';
-  const main = 'use Row from "./row.contract"\ncomponent App\n  view\n    Row(label="a")\n';
-  const p = project({ 'app.contract': main, 'row.contract': row }), f = p.file('app.contract'), g = p.file('row.contract'), server = await open(tsc, p.dir);
-  try {
-    server.openFile(f); server.openFile(g);
-    // As the test's server sorts what it answers: by line, then column.
-    const placed = (a, b) => a[1] - b[1] || a[2] - b[2];
-    const imported = [f, 1, 5, 8], used = [f, 4, 5, 8], prop = [f, 4, 9, 14];
-    expect(await server.references(g, 1, 11)).toEqual([imported, used, [g, 1, 11, 14]].sort(placed));
-    // The editor holds a line the file on disk has not: the declaration is a line lower than the compiler reads it for the importer.
-    server.change(g, `shape Unsaved\n  id: string\n${row}`);
-    const declared = [g, 3, 11, 14];
-    expect(await server.references(g, 3, 11)).toEqual([imported, used, declared].sort(placed));
-    expect(await server.references(g, 5, 5)).toEqual([prop, [g, 5, 5, 10], [g, 7, 10, 15]].sort(placed));
-    expect(await server.definition(f, 4, 5)).toEqual([declared]);
-    expect((await server.rename(g, 3, 11, 'Line')).map(e => e.slice(0, 3))).toEqual([imported, used, declared].map(e => e.slice(0, 3)).sort(placed));
-  } finally { server.close(); p.end(); }
-}, 60_000);
-
 test('an import used by an alias is renamed where it is declared and where it is imported, and its alias stays', async () => {
   if (!ready()) return;
   const row = 'component Row\n  props\n    label: string\n  view\n    text label\n';
@@ -319,5 +298,26 @@ test('an import renamed for meeting a local name is renamed where it is declared
     // The alias and the local `Row` are as they were, and the app still builds.
     expect(text(f).slice(0, 6)).toEqual(['use Line as TheirRow from "./row.contract"', 'component App', '  view', '    column', '      TheirRow(label="a")', '      Row(label="b")']);
     expect(errors(f)).toEqual([]);
+  } finally { server.close(); p.end(); }
+}, 60_000);
+
+test('an unsaved edit above a declaration keeps its importer\'s uses and its rename', async () => {
+  if (!ready()) return;
+  const row = 'component Row\n  props\n    label: string\n  view\n    text label\n';
+  const main = 'use Row from "./row.contract"\ncomponent App\n  view\n    Row(label="a")\n';
+  const p = project({ 'app.contract': main, 'row.contract': row }), f = p.file('app.contract'), g = p.file('row.contract'), server = await open(tsc, p.dir);
+  try {
+    server.openFile(f); server.openFile(g);
+    // As the test's server sorts what it answers: by line, then column.
+    const placed = (a, b) => a[1] - b[1] || a[2] - b[2];
+    const imported = [f, 1, 5, 8], used = [f, 4, 5, 8], prop = [f, 4, 9, 14];
+    expect(await server.references(g, 1, 11)).toEqual([imported, used, [g, 1, 11, 14]].sort(placed));
+    // The editor holds a line the file on disk has not: the declaration is a line lower than the compiler reads it for the importer.
+    server.change(g, `shape Unsaved\n  id: string\n${row}`);
+    const declared = [g, 3, 11, 14];
+    expect(await server.references(g, 3, 11)).toEqual([imported, used, declared].sort(placed));
+    expect(await server.references(g, 5, 5)).toEqual([prop, [g, 5, 5, 10], [g, 7, 10, 15]].sort(placed));
+    expect(await server.definition(f, 4, 5)).toEqual([declared]);
+    expect((await server.rename(g, 3, 11, 'Line')).map(e => e.slice(0, 3))).toEqual([imported, used, declared].map(e => e.slice(0, 3)).sort(placed));
   } finally { server.close(); p.end(); }
 }, 60_000);
