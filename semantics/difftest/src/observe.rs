@@ -126,6 +126,13 @@ pub(crate) fn boot(
             "/",
         )
     })?;
+    // A module's per-target answers are the web's, as the JS target gives them, not those of the machine the
+    // runner was built for: Photo Editor's wallet can pay on macOS and cannot on Linux, so a walk there never
+    // reached its print sizes (#465). The answers boot asked for are asked again for the web.
+    r.set_module_target("web");
+    if let (_, Some(error)) = r.apply_announced() {
+        return Err(error);
+    }
     if every {
         r.build_every_tab()?;
     }
