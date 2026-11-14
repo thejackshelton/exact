@@ -110,7 +110,9 @@ export function install(exact) {
     // Keep the semantic element as the runner's tree does, including the header a platform bar projects.
     if (SEMANTIC_TAGS.test(el.localName) && el.namespaceURI === 'http://www.w3.org/1999/xhtml') props.semanticTag = el.localName;
     if (el.tagName === 'IMG') props.imageSource = el.dataset.symbolSource ?? el.dataset.appSrc ?? el.getAttribute('src') ?? '';
-    if (el.tagName === 'BUTTON' && !el.hasAttribute('role')) props.accessibilityRole = 'button';
+    // A role the host gives is no prop: a sheet's `dialog` (below) and a menu row's `menuitem` (menu-rows.js).
+    const hostRole = el.hasAttribute('data-exact-dialog') || el.hasAttribute('data-exact-menuitem');
+    if (el.tagName === 'BUTTON' && (!el.hasAttribute('role') || hostRole)) props.accessibilityRole = 'button';
     if (el.hasAttribute('aria-label')) props.accessibilityLabel = el.getAttribute('aria-label');
     else if (el.tagName === 'IMG' && el.getAttribute('alt')) props.accessibilityLabel = el.getAttribute('alt');
     // A paragraph of runs has no text of its own: its runs carry it.
@@ -128,7 +130,7 @@ export function install(exact) {
     // The runner's props that element.rs writes as attributes, by its names. A sheet's `role="dialog"` and `aria-modal`
     // are the host's presentation of a modal route, not props (input-glue.js marks them; LLP 1115.000 D4.5).
     const sheet = el.hasAttribute('data-exact-dialog');
-    for (const [attr, prop, num] of PROPS) if (el.hasAttribute(attr) && !(sheet && attr === 'role')) props[prop] = num ? Number(el.getAttribute(attr)) : el.getAttribute(attr);
+    for (const [attr, prop, num] of PROPS) if (el.hasAttribute(attr) && !(hostRole && attr === 'role')) props[prop] = num ? Number(el.getAttribute(attr)) : el.getAttribute(attr);
     // The intent `tree --ax` reads (LLP 1080.002 D7), as the runner names it.
     if (el.hasAttribute('inert')) props.inert = true;
     // A disabled control, as the runner's tree gives its `disabled` prop (LLP 1116.010 D3: `expect disabled`, and a press refused the same on every host).

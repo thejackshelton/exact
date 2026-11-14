@@ -168,3 +168,78 @@ fn a_tablist_in_a_page_menu_moves_by_its_own_arrows() {
     key(&mut p, "ArrowDown", "one");
     assert_eq!(p.host.runner().slot("n"), Some(&Value::Number(0.)));
 }
+
+const INLINE: &str = r#"component App
+  view
+    column width=480 height=400
+      button "Before" testId="before"
+      column role="menu"
+        button "Cut" testId="cut"
+        text testId="note"
+          text "Read the "
+          text "docs" href="/docs" testId="docs"
+        button "Paste" testId="paste"
+      text testId="line"
+        text "See "
+        text "the guide" href="https://example.com/guide" testId="guide"
+      button "After" testId="after"
+"#;
+
+/// A link in a line of text, with no `press` or `tabindex`, takes the focus
+/// as the web's `a[href]` does: a menu's arrows reach it and Tab stops on
+/// it, and Enter follows it.
+#[test]
+fn a_link_in_a_line_of_text_is_focusable_a_menu_member_and_a_tab_stop() {
+    let mut p = boot(INLINE);
+    assert!(p.focusable(id(&p, "docs")));
+    assert!(!p.focusable(id(&p, "note")));
+    assert!(p.set_focus(Some(id(&p, "cut")), 0.).is_none());
+    for (name, next) in [
+        ("ArrowDown", "docs"),
+        ("ArrowDown", "paste"),
+        ("ArrowUp", "docs"),
+        ("ArrowUp", "cut"),
+    ] {
+        key(&mut p, name, next);
+    }
+    assert!(p.set_focus(Some(id(&p, "before")), 0.).is_none());
+    for next in ["cut", "docs", "paste", "guide", "after"] {
+        key(&mut p, "Tab", next);
+    }
+    assert!(p.set_focus(Some(id(&p, "guide")), 0.).is_none());
+    p.key_down("Enter", 0.);
+    p.run_commands(|| ());
+    assert!(p
+        .host
+        .runner()
+        .journal()
+        .any(|line| line.contains("openURL https://example.com/guide")));
+}
+
+/// Enter on a focused `link href` with no `press` follows it, as on the web.
+#[test]
+fn enter_follows_a_focused_link() {
+    let mut p = boot(
+        r#"component App
+  view
+    column width=480 height=400
+      link href="https://example.com/block" testId="block"
+        text "Block"
+"#,
+    );
+    assert!(p.set_focus(Some(id(&p, "block")), 0.).is_none());
+    p.key_down("Enter", 0.);
+    p.run_commands(|| ());
+    let journal: Vec<_> = p.host.runner().journal().map(|l| l.to_string()).collect();
+    assert!(
+        journal
+            .iter()
+            .any(|line| line.contains("openURL https://example.com/block")),
+        "{journal:?}"
+    );
+    // It has no `press` to refuse.
+    assert!(
+        !journal.iter().any(|line| line.contains("NoHandler")),
+        "{journal:?}"
+    );
+}
