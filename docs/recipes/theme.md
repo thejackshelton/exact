@@ -46,9 +46,9 @@ component App
   `contract vocab color` lists the roles. From data, a `fn` names the token:
   `` fn tint(t: string): string = `type-${t}` ``.
 - **`light-dark(light, dark)`** gives a token both schemes. One colour on purpose (an ink on
-  the brand's fill, a ground under media) says `scheme=fixed`; an unmarked one is warned once,
-  at its line (`lower-colour-one-scheme`). A root `theme` block in `app.contract` cannot mark
-  it: move it to `app.tamber`.
+  the brand's fill, a ground under media) says `scheme=fixed`; an unmarked one is warned
+  (`lower-colour-one-scheme`; several share a line, `--json` each). An `app.contract`
+  root `theme` cannot mark it: move it to `app.tamber`.
 - **`AccentColor`** is the app's tint: filled buttons, a plain button's text, the focus ring.
   A filled button's label stays white, so keep both sides at 3:1 under white: a pale dark
   side is warned (`tamber-contrast`).
@@ -61,6 +61,6 @@ component App
 - **The scheme:** `setScheme("light" | "dark" | "system")` sets the app's (in its action, and a
   `mount` task for a kept one); `color-scheme`
   fixes a subtree in one. Modes the person picks (Dim, Black) are axes ([a brand](tamber.md)).
-- **Check it:** `bun exact.mjs tamber check .` (`pair=` warns below 4.5:1); a drive or an
-  authored test says `prefer prefers-color-scheme dark` (then `light`) before an `expect` or
-  `screenshot`, or `check both` judges both schemes.
+- **Check it:** `bun exact.mjs tamber check .` (`pair=` warns below 4.5:1); a drive or a test
+  says `prefer prefers-color-scheme dark` (then `light`) before an `expect` or
+  `screenshot`; `check both` judges both schemes.

@@ -1124,7 +1124,8 @@ it is copied before the bundle is sealed, so it is inside the seal. Only code
 goes under `Helpers/`, where `codesign` refuses a file that is not.
 
 `host.ios.resources` (iOS, iPadOS and tvOS) takes the same entries for files a data
-module reads: `to` is under `Resources/`, and the tree lands in the bundle's
+module reads by path (large, binary, or opened by a native module; data the app ships
+and only reads is a JSON file `app.ts` imports, [shipped data](recipes/shipped-data.md)): `to` is under `Resources/`, and the tree lands in the bundle's
 `ExactResources/` folder, which holds nothing else and is what `bundle:/` names there,
 so `fs.read bundle:/<to>` (`fs.read bundle:/Resources/server` for the entry
 above) reads it on both hosts. A tree holds no links (`bundle:` follows none)
