@@ -124,6 +124,8 @@ impl<D: DataSource> Host<D> {
     }
 
     pub(super) fn record_layout(&mut self, receipt: &exact_kernel::LayoutReceipt) {
+        self.route_overflow.dirty |=
+            !receipt.updated.is_empty() || !receipt.flow_changed.is_empty();
         self.pending_layout
             .extend(receipt.updated.iter().chain(&receipt.flow_changed).copied());
     }

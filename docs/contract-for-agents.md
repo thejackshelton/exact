@@ -2374,7 +2374,16 @@ explicit focus while excluding sequential focus.
 `contract vocab <name>` lists each one's props. A route does not scroll by
 itself: its content goes in a `scroll`, `list` or `overflow-y="auto"` box, which is
 the bar's scroller with nothing written (`navigationScroll` names another; "Routes
-and web documents"). A sheet's swipe down and a pushed screen's edge swipe press the
+and web documents"). On Apple, `logs` journals `route-overflow` when the active
+route's in-flow content, with the route's bottom padding, passes the route's padding
+edge and nothing scrolls it into view. The route's own scroller does; so does the
+navigation root's or the native document scroll, for content past the route's border
+box, unless the route clips it or sits in a native block of its own. It checks after
+first pixel once native layout settles at the window's layout size, leaving smaller
+sheet and keyboard offers out. Full-window modals are checked too. A fitting layout
+clears suppression so later overflow is reported again.
+
+A sheet's swipe down and a pushed screen's edge swipe press the
 route's enabled control whose `id` is the root's `navigationBack`, or, when the route
 has none, one outside every route (a header the screens share).
 `navigationBack` names that control's `id`, not its action: for example,

@@ -486,10 +486,13 @@ This list holds what the [agent guide](contract-for-agents.md)'s rules don't mak
   right after the `header`. It is the bar's scroller with nothing written, and
   `navigationScroll="id"` on the route names a different one
   (docs/contract-for-agents.md, "Routes and web documents"). The compiler refuses
-  a name nothing in the route carries, or one on a box that never scrolls (`lower-route-scroll`). **Candidate diagnostics:** the
+  a name nothing in the route carries, or one on a box that never scrolls (`lower-route-scroll`). **Candidate diagnostic:** the
   compiler could refuse a named scroller that is not right after the `header` (an
-  iOS-only rule today, so not refused); the hosts could journal a route whose
-  content overflows with nothing to scroll it (QUEUE.md).
+  iOS-only rule today, so not refused). Apple's `logs` journals `route-overflow`
+  after first pixel at the settled window offer when no scroller reaches the
+  route's in-flow overflow: an ancestor's or the document's stops at a clip or a
+  native block, and never moves content that stays in the route's box out of its
+  padding. A fitting layout clears suppression.
 - **The root screen has no native bar, and the log says `navigationKey "0" matches no
   route`.** Cause: the list route is keyed by a name (`navigationKey="items"`, as the
   `list-detail` and `rest` patterns key it) while the root names the visit,

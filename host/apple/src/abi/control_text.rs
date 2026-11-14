@@ -130,8 +130,9 @@ impl<D: DataSource> Bridge<D> {
         let segments = given(16)
             .then(|| super::segments::segment_rects(&bytes[(11 + count) * 4..last], rects as u32));
         let keyboard = given(32).then(|| float(last / 4));
+        let observed = size.and(self.live_clock).map(|clock| clock());
         let out = self.host.as_mut().map_or_else(not_booted, |h| {
-            h.set_view(
+            h.set_view_at(
                 screen,
                 insets,
                 regions,
@@ -140,6 +141,7 @@ impl<D: DataSource> Bridge<D> {
                 keyboard,
                 &owners.blocks,
                 &owners.placements,
+                observed,
             )
         });
         self.emit(out)
