@@ -38,14 +38,19 @@ export function names(ctx) {
   const definitions = (symbols.definitions ?? []).map(d => ({ ...d, name: written(d), compiled: d.name }));
   /** Each definition's key in its file's `the`: what it is and what it belongs to, as its file writes them, and which
    * of several such it is in that file. Not where it is: an importer is given the file as saved, and the editor may
-   * hold lines above the declaration that the saved file has not. */
+   * hold lines above the declaration that the saved file has not. The parts are kept apart, so no name can be read
+   * as another part. */
   const keys = (() => {
-    const components = new Map(definitions.filter(d => d.kind === 'component').map(d => [`${d.file}\n${d.compiled}`, d.name]));
+    // The compiler names what a definition belongs to as it names that itself: `Item__row` for an import that met a
+    // local name, which its own file writes `Item`.
+    const authored = new Map(definitions.filter(d => d.compiled !== d.name).map(d => [`${d.file}\n${d.compiled}`, d.name]));
+    const belongs = (d, to) => authored.get(`${d.file}\n${to}`) ?? to ?? null;
     const seen = new Map(), keys = [];
     for (const i of definitions.map((_, i) => i).sort((a, b) => definitions[a].line - definitions[b].line || definitions[a].col - definitions[b].col)) {
-      const d = definitions[i], what = `${components.get(`${d.file}\n${d.component}`) ?? d.component ?? ''}:${d.owner ?? ''}:${d.kind}:${d.name}`;
-      const nth = seen.get(`${d.file}\n${what}`) ?? 0; seen.set(`${d.file}\n${what}`, nth + 1);
-      keys[i] = JSON.stringify(nth ? `${what}#${nth}` : what);
+      const d = definitions[i], what = [belongs(d, d.component), belongs(d, d.owner), d.kind, d.name];
+      const among = JSON.stringify([d.file, ...what]), nth = seen.get(among) ?? 0;
+      seen.set(among, nth + 1);
+      keys[i] = JSON.stringify(JSON.stringify([...what, nth]));
     }
     return keys;
   })();

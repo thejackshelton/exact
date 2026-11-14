@@ -321,3 +321,35 @@ test('an unsaved edit above a declaration keeps its importer\'s uses and its ren
     expect((await server.rename(g, 3, 11, 'Line')).map(e => e.slice(0, 3))).toEqual([imported, used, declared].map(e => e.slice(0, 3)).sort(placed));
   } finally { server.close(); p.end(); }
 }, 60_000);
+
+test('a field of an imported shape that meets a local shape\'s name keeps its uses in the importer', async () => {
+  if (!ready()) return;
+  const row = 'shape Item\n  id: string\nfn label(v: Item): string = v.id\n';
+  const main = 'use Item as OtherItem, label from "./row.contract"\nshape Item\n  name: string\nfn key(v: OtherItem): string = v.id\ncomponent App\n  state mine: Item = Item(name="a")\n  view\n    text mine.name\n';
+  const p = project({ 'app.contract': main, 'row.contract': row }), f = p.file('app.contract'), g = p.file('row.contract'), server = await open(tsc, p.dir);
+  try {
+    // The compiler names the imported shape `Item__row`, and its field's owner so; its own file writes `Item`.
+    expect(symbols(f).definitions.filter(d => d.kind === 'field').map(d => [d.name, d.owner])).toEqual([['name', 'Item'], ['id', 'Item__row']]);
+    server.openFile(f); server.openFile(g);
+    const placed = (a, b) => a[0].localeCompare(b[0]) || a[1] - b[1] || a[2] - b[2];
+    const declared = [g, 2, 3, 5], used = [[f, 4, 34, 36], [g, 3, 31, 33]];
+    expect(await server.definition(f, 4, 34)).toEqual([declared]);
+    expect((await server.references(g, 2, 3)).sort(placed)).toEqual([...used, declared].sort(placed));
+    expect((await server.rename(g, 2, 3, 'key')).map(e => e.slice(0, 3)).sort(placed)).toEqual([...used, declared].map(e => e.slice(0, 3)).sort(placed));
+  } finally { server.close(); p.end(); }
+}, 60_000);
+
+test('an id whose name ends as a counted key would is its own definition', async () => {
+  if (!ready()) return;
+  // Two ids `entry` in one component, then `entry#1`: the second `entry` must not be keyed as the third is.
+  const main = 'component App\n  state on = true\n  action go\n    focus("entry#1")\n  view\n    main\n      if on\n        input id="entry"\n      else\n        input id="entry"\n      input id="entry#1"\n      button "Go" press=go\n';
+  const p = project({ 'app.contract': main }), f = p.file('app.contract'), server = await open(tsc, p.dir);
+  try {
+    expect(symbols(f).definitions.filter(d => d.kind === 'id').map(d => [d.name, d.line])).toEqual([['entry', 8], ['entry', 10], ['entry#1', 11]]);
+    server.openFile(f);
+    expect((await server.definition(f, 4, 13)).map(e => e[1])).toEqual([11]);
+    expect((await server.references(f, 11, 18)).map(e => e[1])).toEqual([4, 11]);
+    expect((await server.references(f, 10, 20)).map(e => e[1])).toEqual([10]);
+    expect(await server.diagnostics(f)).toEqual([]);
+  } finally { server.close(); p.end(); }
+}, 60_000);
