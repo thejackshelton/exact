@@ -621,13 +621,14 @@ extension NodeView {
             imageView = nil; ink = textRasterLayer ?? InkLayer()
         }
         hostText(ink)
+        // The fade snapshots the old image at its old frame, before either changes.
+        textBoxLayer?.show(from: shown, to: key.spec)
         // The box follows UIKit's resize; the cropped ink rectangle changes atomically with its image
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         ink.frame = result.frame
         ink.contentsScale = key.scale
         CATransaction.commit()
-        textBoxLayer?.show(from: shown, to: key.spec)
         let roll = NumeralRoll.roll(ink, node: self)
         UIView.performWithoutAnimation {
             if let coverage, let imageView {
