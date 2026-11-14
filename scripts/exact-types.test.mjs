@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 function inDir(body) {
   const dir = mkdtempSync(resolve(tmpdir(), 'exact-types-'));
@@ -137,6 +137,20 @@ test('contract JSON preserves the backend-selection diagnostic id', () => inDir(
   assert.equal(errors[0].file, 'app.ts');
   assert.match(errors[0].message, /^EXACT_BACKEND_ORIGIN:/);
 }), 60000);
+
+test("without cargo or a built web compiler, app.ts's check says it needs Rust, and its diagnostic keeps that id (#460)", async () => {
+  const { typeDiagnostics } = await import('./exact.mjs');
+  inDir(dir => {
+    backendApp(dir);
+    // No cargo on PATH, and neither this checkout's compiler nor one kept for the machine (HOME, the target) to run instead.
+    const env = { ...process.env, EXACT_APP_DIR: dir, PATH: dirname(process.execPath), HOME: dir, CARGO_TARGET_DIR: resolve(dir, 'target') };
+    delete env.EXACT_WEB_COMPILER; delete env.EXACT_BACKEND_ORIGIN;
+    const r = spawnSync(process.execPath, ['host/web-js/build.mjs', 'backend', '--check', '--out', resolve(dir, 'dist')], { cwd: resolve(import.meta.dir, '..'), env, encoding: 'utf8', timeout: 60000 });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /^error \[rust-missing\]: backend: .*cargo is not on PATH: install rustup from https:\/\/rustup\.rs/m);
+    assert.deepEqual(typeDiagnostics(r.stderr, dir).map(d => d.id), ['rust-missing']);
+  });
+}, 60000);
 
 test('a native bake preserves backend flag provenance through its Cargo environment', () => {
   const root = resolve(import.meta.dir, '..'), dir = mkdtempSync(resolve(root, 'target/backend-native-'));

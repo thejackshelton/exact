@@ -229,6 +229,9 @@ if (existsSync(gpuLib) && !checkOnly && !prerequisitesOnly) {
 // or as the one another checkout of this machine built from these sources.
 const compiler = webCompiler();
 const cargo = spawnSync(compiler.cmd, [...compiler.pre, 'js', input, '-o', gen, '--app', appDir, ...(production ? [] : ['--sites']), ...(devReload ? ['--dev-reload'] : [])], { cwd: root, stdio: checkOnly ? ['ignore', 'ignore', 'pipe'] : 'inherit', encoding: 'utf8', env: { ...process.env, EXACT_JS_GPU_SURFACES: (gpuSurfaces ?? []).join(',') } });
+// With no built compiler and no cargo, the build, and app.ts's type check with it, cannot run: said as that, not as a
+// failed check (#460).
+if (cargo.error?.code === 'ENOENT') { console.error(`error [rust-missing]: ${app}: the web compiler (exact-web-js) builds with Rust, and cargo is not on PATH: install rustup from https://rustup.rs, then run bun ${join(root, 'scripts/exact.mjs')} setup`); process.exit(1); }
 if (cargo.status !== 0) { if (checkOnly) process.stderr.write(cargo.stderr ?? ''); process.exit(cargo.status ?? 1); }
 compiler.done();
 const leaves = [['markdown', buildMarkdown, 'markdown.wasm'], ['motion', buildMotion, 'motion.wasm'], ['editor', buildEditor, 'markup-editor.wasm'], ['flow', buildFlow, 'textflow.wasm']]
