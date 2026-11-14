@@ -24,6 +24,7 @@ capabilities.
 - [State and action semantics](#state-and-action-semantics)
 - [Composition and lifetime](#composition-and-lifetime)
 - [Data requests and side effects](#data-requests-and-side-effects)
+  - [A TypeScript package for the data module](#a-typescript-package-for-the-data-module)
   - [Native sign-in](#native-sign-in-exactsign-in)
   - [Tools: what a call answers](#tools-what-a-call-answers)
 - [Views, layout, and interaction](#views-layout-and-interaction)
@@ -1238,6 +1239,35 @@ export async function toPosts(nodes: Node[]): Promise<Post[]> {
 
 The function that yields is `async`, and so is every caller that awaits it.
 On the web the page has no such budget, and a yield lets it paint mid-parse.
+
+### A TypeScript package for the data module
+
+A package whose runtime entry is TypeScript source must also provide declaration
+files for the type check. This applies to installed packages and linked `file:`
+or workspace dependencies, including packages outside the app folder. The checker
+stages package manifests and `.d.ts`, `.d.mts` and `.d.cts` files; it does not stage
+package source (LLP 1027 D5). The bundler captures runtime code separately.
+
+For example, a package with `index.ts` and `index.d.ts` can export:
+
+```json
+{
+  "name": "my-data-helper",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.ts" }
+  }
+}
+```
+
+Put `types` before `default`. Supply declarations for each imported subpath, and
+make their imports resolve to declarations too. Keep declarations in step with
+source: generate them with the package's own TypeScript configuration using
+`declaration` and `emitDeclarationOnly`, or maintain them by hand for a small API.
+A `module outside captured app` refusal naming a package's TypeScript source
+means the checker reached source outside its stage; check that entry's declaration
+export and its declaration imports. Moving the package into the app does not
+supply the missing declarations.
 
 ### Declared sources
 

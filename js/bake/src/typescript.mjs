@@ -523,8 +523,7 @@ const builtin=(spec)=>spec.startsWith('node:') || BUILTIN.has(spec) || BUILTIN.h
 // npm's package names (with the old capitals) and versions: a place in the
 // stage is made of them, so nothing else is taken.
 const NAME=/^(?:@[a-z0-9~][\w.~-]*\/)?[a-z0-9~][\w.~-]*$/i, VERSION=/^(?:[0-9a-z][\w.+-]*)?$/i;
-// The package a file belongs to: the nearest `package.json` that names one
-// (a nested `{"type":"module"}` names none).
+// A nameless entry manifest ends the package walk; a nested `{"type":"module"}` does not.
 function packageOf(file, installed) {
   for (let dir=dirname(file);;) {
     let json=null;
@@ -534,6 +533,7 @@ function packageOf(file, installed) {
       if (!NAME.test(json.name) || !VERSION.test(version)) throw new Error(`${join(dir,'package.json')}: not an npm package name and version (${JSON.stringify(json.name)}, ${JSON.stringify(version)})`);
       return {root:dir,key:json.name+'@'+version,name:json.name,json,installed:new Set(installed ? [installed] : [])};
     }
+    if (json && ['exports','main','types'].some(key=>Object.hasOwn(json,key))) return null;
     const up=dirname(dir);
     if (up===dir) return null;
     dir=up;
@@ -1402,7 +1402,13 @@ function checkFiles(stage, libraries, files) {
   libraries = realpathSync.native(libraries);
   const allowed = path => within(path, stage) || (within(path, libraries) && configuredLibrary(relative(libraries, path)));
   for (const path of files) {
-    if (path && !allowed(realpathSync.native(path))) throw new Error('module outside captured app: ' + path);
+    if (!path || allowed(realpathSync.native(path))) continue;
+    let pkg;
+    if (/\.[cm]?tsx?$/.test(path) && !DECLARATION.test(path)) {
+      try { pkg=packageOf(path); } catch { /* keep the capture refusal if package metadata is invalid */ }
+    }
+    const note=pkg && pkg.root!==physicalId(capturedOrigins(stage).at(-1)[1]) ? `: TypeScript source in package ${pkg.name} (${join(pkg.root,'package.json')}). The type check stages package declarations, not source. Export a declaration file for this entry (for example, a "types" condition before "default") and keep its imports within the staged declarations.` : '';
+    throw new Error('module outside captured app: ' + path + note);
   }
   checkPeers(stage,files);
 }
@@ -1418,12 +1424,6 @@ function checkPeers(stage, files) {
   for (const [file,why] of peerRefusals) if (used.has(physicalId(resolve(stage,file)))) throw new Error(why);
 }
 
-/** Type-check a configured stage with the native compiler `tsc` (whose
- * standard libraries are in `libraries`): its diagnostics, or the compiler's
- * actual resolved graph, type-only imports included, must stay inside the
- * stage (a package's declarations are in it: `stagePackages`) and the
- * configured libraries. An external declaration must not influence an
- * accepted app artifact. */
 /** The checker runs before the bundle refuses a Node built-in, and says only "Cannot find module 'node:fs'… Try
  * `npm i --save-dev @types/node`", which changes nothing (expo/exact-build#183). Said here as the bundle says it. */
 export function nodeNote(diagnostics) {
@@ -1434,6 +1434,9 @@ export function nodeNote(diagnostics) {
   if (!modules.length && !names) return '';
   return `\nnote: ${modules.length ? `${modules.map(m=>`'${m}'`).join(', ')} ${modules.length>1 ? "are Node's built-ins" : "is Node's built-in"}` : "Node's globals are"}: a data module runs on Hermes and in the browser, which have no Node modules, so @types/node does not help; import a part of the package that needs none, or another package\n`;
 }
+/** Type-check a configured stage with native `tsc`: diagnostics and resolved files, including type-only imports,
+ * must stay inside the stage (`stagePackages` captures package declarations) and the configured `libraries`.
+ * An external declaration must not influence an accepted app artifact. */
 export async function check(stage, tsc, libraries) {
   // TypeScript expands Windows short paths; compare the same physical names
   // for the capture, libraries and files, including directory junctions.
