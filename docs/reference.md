@@ -332,7 +332,9 @@ the plan, so this is not an original-source revision guarantee.
 
 `fmt --stdout` previews source-preserving formatting; `--check` prints a diff
 and exits nonzero when formatting differs. Plain `fmt <file>` writes the result
-explicitly. Formatting never runs automatically on save.
+explicitly. `fmt --stdin <file>` formats stdin's text to stdout, an editor's
+unsaved buffer: the file names the text and is not read. Formatting never runs
+automatically on save.
 
 ## Contract evaluation limits
 

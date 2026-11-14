@@ -375,7 +375,7 @@ artifacts under game/target only. Ports none. Runs to completion.`,
   vocab [--json] [--all] [<name> …]       no name: the card, what an app writes, in one read (--all: every
                                           tag, attribute, CSS property and function); each name's entry in
                                           turn, a recipe whole, a pattern's summary; exit 1 if one is unknown
-  fmt [--check | --stdout] <file.contract> · fmt --uses <file.contract>
+  fmt [--check | --stdout | --stdin] <file.contract> · fmt --uses <file.contract>
   symbols <file.contract> [--name <name>] · sources <file.contract>
   build … --stdin · symbols … --stdin     the file's text is stdin's (an editor's unsaved buffer), read as
                                           if saved at <file.contract>; app.ts is not type-checked against it

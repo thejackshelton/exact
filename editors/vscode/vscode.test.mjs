@@ -97,6 +97,58 @@ test('`.contract` is registered with the TypeScript 7 extension once content map
   assert.equal(await activate(old.context, old.vscode), false);
 });
 
+test('a contract is formatted by the compiler the workspace names, as the editor holds it, and not at all until one is named', async () => {
+  const bin = process.env.EXACT_CONTRACT ?? resolve(ROOT, 'target/debug/contract');
+  if (!existsSync(bin)) { console.log('skipped: no contract binary'); return; }
+  const manifest = JSON.parse(readFileSync(resolve(import.meta.dir, 'package.json'), 'utf8'));
+  assert.equal(manifest.contributes.configuration.properties['exactContract.compiler'].type, 'string');
+  const { activate } = await import('./extension.js');
+  const fake = compiler => {
+    const providers = [], warnings = [], listeners = [], context = { subscriptions: [] };
+    const vscode = {
+      extensions: { getExtension: () => undefined },
+      workspace: {
+        getConfiguration: () => ({ get: key => key === 'exactContract.compiler' ? compiler() : undefined }),
+        onDidChangeConfiguration: listener => { listeners.push(listener); return { dispose() {} }; },
+      },
+      languages: { registerDocumentFormattingEditProvider: (language, provider) => { providers.push([language, provider]); return { dispose() { providers.length = 0; } }; } },
+      window: { showWarningMessage: message => warnings.push(message) },
+      Range: function (start, end) { return { start, end }; },
+      TextEdit: { replace: (range, text) => ({ range, text }) },
+    };
+    const change = () => Promise.all(listeners.map(l => l({ affectsConfiguration: key => key === 'exactContract.compiler' })));
+    /** The edits a Format Document of `text` gets, the file on disk being another text or none. */
+    const format = text => providers[0][1].provideDocumentFormattingEdits({ fileName: '/nowhere/app.contract', getText: () => text, positionAt: offset => offset });
+    return { vscode, context, providers, warnings, change, format };
+  };
+  // No compiler named: no formatter is registered, so nothing is run.
+  let named;
+  const editor = fake(() => named);
+  await activate(editor.context, editor.vscode);
+  assert.equal(editor.providers.length, 0);
+  // Named later: registered for contracts, once.
+  named = bin;
+  await editor.change(); await editor.change();
+  assert.deepEqual(editor.providers.map(([language]) => language), ['exact-contract']);
+  // The whole text is replaced by the compiler's formatting of it; text already so has no edit.
+  const unformatted = 'component A\n  view\n    text   "a"   font-size=12\n', formatted = 'component A\n  view\n    text "a" font-size=12\n';
+  assert.deepEqual(await editor.format(unformatted), [{ range: { start: 0, end: unformatted.length }, text: formatted }]);
+  assert.deepEqual(await editor.format(formatted), []);
+  // Text the compiler refuses is left as it is: the refusal is the compiler's to show, where it shows its others.
+  assert.deepEqual(await editor.format('component A\n  view\n    text "a'), []);
+  assert.deepEqual(editor.warnings, []);
+  // A compiler that is not there is said once, by the setting that names it.
+  named = '/nowhere/contract';
+  await editor.change();
+  assert.deepEqual([await editor.format(unformatted), await editor.format(unformatted)], [[], []]);
+  assert.equal(editor.warnings.length, 1);
+  assert.match(editor.warnings[0], /exactContract\.compiler.*\/nowhere\/contract/);
+  // Unset again: the formatter goes.
+  named = undefined;
+  await editor.change();
+  assert.equal(editor.providers.length, 0);
+});
+
 test('Enter indents after every opener whose body is a block, and not after a line that is whole', () => {
   const { indentationRules } = JSON.parse(readFileSync(resolve(import.meta.dir, 'language-configuration.json'), 'utf8'));
   const indents = new RegExp(indentationRules.increaseIndentPattern);
