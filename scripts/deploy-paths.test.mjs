@@ -489,7 +489,7 @@ test('async glue runs the capture fixtures and the web JS target\'s tests, less 
   expect(glue).toContain('./host/web-js/conformance/net.test.mjs');
   expect(glue).toContain('./host/web-js/live-clock.test.js');
   expect(glue).not.toContain('./host/web-js/bundle-size.test.mjs');
-  expect(glue).not.toContain('./host/web-js/document-agent.test.mjs');
+  expect(glue).toContain('./host/web-js/document-agent.test.mjs');
 });
 
 test('async glue runs a script test no list names', () => {
