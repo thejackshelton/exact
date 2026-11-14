@@ -7,9 +7,64 @@ use crate::typescript::{inline, parameter, record, Node, Noted, Table};
 use contract_syntax::{Component, Param};
 use contract_types::Ty;
 use serde_json::json;
+use std::collections::BTreeMap;
 
-/// The checker's types, as the printer reads a plan's.
-struct Checked<'a>(&'a contract_types::Shapes);
+/// The name TypeScript knows a shape by, for each whose own it cannot take.
+pub(super) type Aliases = BTreeMap<String, String>;
+
+/// An alias for each shape whose name is no TypeScript type name: one with a
+/// hyphen (`A-B`), a reserved word (`class`) or a type of TypeScript's own
+/// (`string`). An alias is the name with `_` for what an identifier cannot
+/// hold, and `_` after it until no shape and no other alias has it. None
+/// outside `symbols --editor`, which writes no type.
+pub(super) fn aliases(shapes: &contract_types::Shapes, editor: bool) -> Aliases {
+    const TYPES: [&str; 12] = [
+        "any",
+        "bigint",
+        "boolean",
+        "never",
+        "number",
+        "object",
+        "string",
+        "symbol",
+        "undefined",
+        "unique",
+        "unknown",
+        "void",
+    ];
+    let named = |name: &str| parameter(name).is_some() && !TYPES.contains(&name);
+    let mut aliases = Aliases::new();
+    if !editor {
+        return aliases;
+    }
+    let mut taken = std::collections::BTreeSet::new();
+    for name in shapes.map.keys().filter(|name| !name.is_empty()) {
+        if named(name) {
+            continue;
+        }
+        let mut alias: String = (name.chars())
+            .map(|c| match c {
+                c if c.is_ascii_alphanumeric() || c == '$' => c,
+                _ => '_',
+            })
+            .collect();
+        if alias.starts_with(|c: char| c.is_ascii_digit()) {
+            alias.insert(0, '_');
+        }
+        while !named(&alias) || shapes.map.contains_key(&alias) || !taken.insert(alias.clone()) {
+            alias.push('_');
+        }
+        aliases.insert(name.clone(), alias);
+    }
+    aliases
+}
+
+/// The checker's types, as the printer reads a plan's, each shape by the
+/// name TypeScript knows it by.
+struct Checked<'a> {
+    shapes: &'a contract_types::Shapes,
+    aliases: &'a Aliases,
+}
 impl Table for Checked<'_> {
     type Id = Ty;
     fn node<'a>(&'a self, ty: &'a Ty) -> Option<Node<'a, Ty>> {
@@ -22,9 +77,9 @@ impl Table for Checked<'_> {
             Ty::Option(t) => Node::Option((**t).clone()),
             Ty::List(t) => Node::List((**t).clone()),
             Ty::Record(name) => {
-                let (name, fields) = self.0.map.get_key_value(name)?;
+                let (name, fields) = self.shapes.map.get_key_value(name)?;
                 Node::Record(
-                    name,
+                    self.aliases.get(name).unwrap_or(name),
                     fields
                         .iter()
                         .map(|(n, t)| (n.as_str(), t.clone()))
@@ -47,7 +102,10 @@ impl<'a> Resolver<'a> {
         if !self.graph.editor {
             return None;
         }
-        let table = Checked(&self.types.shapes);
+        let table = Checked {
+            shapes: &self.types.shapes,
+            aliases: self.aliases,
+        };
         let mut named = Noted::default();
         let text = print(&table, &mut named)?;
         self.note(&table, named).then_some(text)
@@ -102,7 +160,7 @@ impl<'a> Resolver<'a> {
                 continue;
             }
             match record(table, &ty, &mut named) {
-                Some(body) => bodies.push((key, body)),
+                Some(body) => bodies.push((key, (self.aliases.get(name).cloned(), body))),
                 None => return false,
             }
         }
@@ -156,12 +214,16 @@ fn signature(names: Option<Vec<String>>, types: &[String], result: &str) -> Stri
     }
 }
 
-/// `shapes`: each shape the definitions' types name, with its body, and
-/// the `file` it was read in when files were read on their own.
+/// `shapes`: each shape the definitions' types name, with its body, the name
+/// the types write it `as` when that is not its own, and the `file` it was
+/// read in when files were read on their own.
 pub(super) fn write(out: &mut Vec<u8>, sources: &Sources, shapes: &Shapes) {
     let shapes: Vec<_> = (shapes.iter())
-        .map(|((alone, name), body)| {
+        .map(|((alone, name), (alias, body))| {
             let mut shape = json!({ "name": name, "type": body });
+            if let Some(alias) = alias {
+                shape["as"] = alias.as_str().into();
+            }
             if let Some(path) = alone.and_then(|id| sources.paths().get(id as usize)) {
                 shape["file"] = path.to_string_lossy().into();
             }

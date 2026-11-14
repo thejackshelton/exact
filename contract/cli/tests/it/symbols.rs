@@ -700,6 +700,38 @@ component App
 }
 
 #[test]
+fn a_shape_typescript_cannot_name_is_written_by_an_alias_no_shape_has() {
+    let f = Fixture::new("types-alias");
+    let graph = f.editor_query(
+        r#"shape A-B
+  x: number
+shape A_B
+  y: string
+shape class
+  z: number
+fn first(value: A-B): number = value.x
+fn second(value: A_B, other: class): string = value.y
+component App
+  state one = A-B(x=1)
+  view
+    text "x"
+"#,
+    );
+    let ty = |kind: &str, name: &str| definition(&graph, kind, name, None)["type"].clone();
+    // `A_B` is a shape's own name, so `A-B` is not written as it.
+    assert_eq!(ty("fn", "first"), "(value: A_B_) => number");
+    assert_eq!(ty("fn", "second"), "(value: A_B, other: class_) => string");
+    assert_eq!(
+        graph["shapes"],
+        serde_json::json!([
+            { "name": "A-B", "as": "A_B_", "type": "{ x: number }" },
+            { "name": "A_B", "type": "{ y: string }" },
+            { "name": "class", "as": "class_", "type": "{ z: number }" },
+        ])
+    );
+}
+
+#[test]
 fn a_declaration_the_check_leaves_out_has_no_type_of_its_namesake() {
     let f = Fixture::new("types-duplicate");
     let path = f.write(

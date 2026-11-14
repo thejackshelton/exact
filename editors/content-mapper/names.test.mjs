@@ -253,6 +253,20 @@ for (const [name, kind, file] of [['realworld', 'state'], ['realworld', 'action'
     expect(r.uses[1]).toBe(r.uses[0]);
   }, 120_000);
 
+test('a function of a shape TypeScript cannot name hovers with the shape\'s alias, and its fields', async () => {
+  if (!ready()) return;
+  const main = 'shape A-B\n  x: number\nshape A_B\n  y: string\nshape class\n  z: number\nfn first(value: A-B): number = value.x\nfn second(value: A_B, other: class): string = value.y\ncomponent App\n  view\n    text "x"\n';
+  const p = project({ 'app.contract': main }), f = p.file('app.contract'), server = await open(tsc, p.dir);
+  try {
+    server.openFile(f);
+    expect(await server.hover(f, 7, 4)).toContain('(value: A_B_) => number');
+    expect(await server.hover(f, 8, 4)).toContain('(value: A_B, other: class_) => string');
+    // TypeScript resolved the aliases: the parameter is its shape's fields, not `any`.
+    expect(await server.hover(f, 7, 10)).toContain('A_B_');
+    expect(await server.diagnostics(f)).toEqual([]);
+  } finally { server.close(); p.end(); }
+}, 60_000);
+
 test('an import used by an alias is renamed where it is declared and where it is imported, and its alias stays', async () => {
   if (!ready()) return;
   const row = 'component Row\n  props\n    label: string\n  view\n    text label\n';

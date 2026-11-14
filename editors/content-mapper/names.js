@@ -25,8 +25,9 @@ function spelling(ctx, s, text = ctx.content) {
 
 export function names(ctx) {
   const symbols = ctx.contract(['symbols', ctx.fileName, '--stdin', '--editor']) ?? {}, { references = [] } = symbols;
-  // Files read on their own may each declare a shape of one name: this file's are its own.
-  const shapes = Object.fromEntries((symbols.shapes ?? []).filter(s => s.file === undefined || ctx.here(s)).map(s => [s.name, s.type]));
+  // Files read on their own may each declare a shape of one name: this file's are its own. A shape is held by the
+  // name the compiler's types write it as, which is not its own when TypeScript cannot take that (`A-B`, `class`).
+  const shapes = Object.fromEntries((symbols.shapes ?? []).filter(s => s.file === undefined || ctx.here(s)).map(s => [s.as ?? s.name, s.type]));
   const contract = s => s.file !== undefined && extname(s.file) === '.contract';
   const elsewhere = d => !ctx.here(d) && contract(d);
   const text = file => { try { return readFileSync(file, 'utf8'); } catch { return null; } };

@@ -42,8 +42,9 @@ struct Reference {
 }
 type Names = BTreeMap<String, usize>;
 type Owners = BTreeMap<String, Names>;
-/// A shape's body, by its name and the source read alone that declares it.
-type Shapes = BTreeMap<(Option<u32>, String), String>;
+/// A shape's body, and its alias when it has one, by its name and the source
+/// read alone that declares it.
+type Shapes = BTreeMap<(Option<u32>, String), (Option<String>, String)>;
 #[derive(Default)]
 struct Graph {
     definitions: Vec<Definition>,
@@ -394,9 +395,11 @@ fn symbols(path: &Path, name: Option<&str>, editor: bool) -> Result<String, Part
         }
     };
     let types = Types { shapes, components };
+    let aliases = types::aliases(&types.shapes, editor);
     let mut r = Resolver {
         file: &file,
         types: &types,
+        aliases: &aliases,
         typed,
         left_out,
         whole: errors.is_empty(),
@@ -437,6 +440,8 @@ fn symbols(path: &Path, name: Option<&str>, editor: bool) -> Result<String, Part
 struct Resolver<'a> {
     file: &'a File,
     types: &'a Types,
+    /// The name TypeScript knows a shape by, when not its own (`--editor`).
+    aliases: &'a types::Aliases,
     /// Whether the type check accepted the program: `types` holds only its
     /// declarations' otherwise.
     typed: bool,
