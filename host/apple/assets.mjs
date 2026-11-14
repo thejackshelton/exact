@@ -955,7 +955,7 @@ export function codeDigest(bytes) {
   return createHash('sha256').update(code() ?? bytes).digest('hex');
 }
 
-export function signedGpuProduct(product, { identity = '-', framework = null, app, platform = 'iPhoneOS', hardened = false, privacyManifest = null } = {}) {
+export function signedGpuProduct(product, { identity = '-', framework = null, app, platform = 'iPhoneOS', hardened = false, privacyManifest = null, macDevelopmentSign = false } = {}) {
   // Cargo puts its own unsigned file back on every build, and a signature
   // carries its signing time: signing in place made the app's bake (which
   // names this product's digest) run on every build. Sign a copy beside it,
@@ -977,7 +977,7 @@ export function signedGpuProduct(product, { identity = '-', framework = null, ap
     copyFileSync(product, resolve(directory, basename(product)));
     if (framework) wrapFramework(directory, basename(product), framework, app, platform, { apiManifests: privacyManifest ? [privacyManifest] : [] });
     run('codesign', ['--force', '--sign', identity ?? '-', ...(hardened ? ['--options', 'runtime'] : []),
-      hardened && identity && identity !== '-' ? '--timestamp' : '--timestamp=none', container], {stdio:'ignore'});
+      hardened && identity && identity !== '-' ? '--timestamp' : '--timestamp=none', container], {stdio:'ignore', macDevelopmentSign});
     writeFileSync(record, source);
   }
   return signed;

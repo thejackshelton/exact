@@ -1183,23 +1183,21 @@ test('a refused parent prevents use of a stale companion bundle', async () => {
 });
 
 
-test('Mac signing preflight falls back without a development identity and reads hardware only for Mac profiles', async () => {
+test('Mac signing preflight requires an identity or explicit omission and reads hardware only for Mac profiles', async () => {
   const { macWidgetSigning, widgetSigningTeam, macHardwareID, macWidgetProfiles } = await import('../host/apple/widgets.mjs');
   const { profile } = await import('../host/apple/devices.mjs');
   const app = { id: 'com.exact.test', manifest: { widgets: [{ kind: 'public', families: ['systemSmall'] }] } };
   const messages = [];
-  assert.equal(macWidgetSigning(app, null, { log: text => messages.push(text) }), null);
+  assert.throws(() => macWidgetSigning(app, null), /Apple Development.*EXACT_IDENTITY=-.*without the extension/);
+  assert.equal(macWidgetSigning(app, '-', { log: text => messages.push(text) }), null);
   assert.equal(messages.length, 1); assert.match(messages[0], /EXACT_IDENTITY/);
   const certificates = [{ subject: 'CN=Apple Development: Fixture\nOU=0123456789', fingerprint: 'AA' },
     { subject: 'CN=Developer ID Application: Fixture\nOU=0123456789', fingerprint: 'BB' }];
   assert.equal(widgetSigningTeam('AA', { certificates }), '0123456789');
   assert.equal(widgetSigningTeam('Apple Development: Fixture', { certificates }), '0123456789');
-  assert.equal(macWidgetSigning(app, 'BB', { certificates, log: text => messages.push(text) }), null);
-  assert.match(messages.at(-1), /Developer ID.*ad hoc.*EXACT_IDENTITY.*Apple Development/);
-  assert.equal(macWidgetSigning(app, null, { distribution: true, log: text => messages.push(text) }), null);
-  assert.match(messages.at(-1), /EXACT_IDENTITY.*Developer ID Application/);
-  assert.doesNotMatch(messages.at(-1), /Apple Development/);
-  assert.throws(() => macWidgetSigning(app, 'AA', { certificates, distribution: true }), /Developer ID Application.*EXACT_IDENTITY names Apple Development/);
+  assert.throws(() => macWidgetSigning(app, 'BB', { certificates }), /Apple Development.*EXACT_IDENTITY/);
+  assert.throws(() => macWidgetSigning(app, null, { distribution: true }), /Developer ID Application.*EXACT_DEVELOPER_ID/);
+  assert.throws(() => macWidgetSigning(app, 'AA', { certificates, distribution: true }), /Developer ID Application.*EXACT_DEVELOPER_ID names Apple Development/);
   assert.equal(widgetSigningTeam('BB', { certificates, distribution: true }), '0123456789');
   // Captured SPHardwareDataType property list; hardware and provisioning ids redacted separately.
   const capture = readFileSync(new URL('../host/apple/tests/fixtures/mac-hardware.json', import.meta.url), 'utf8');

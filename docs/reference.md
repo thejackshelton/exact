@@ -1165,6 +1165,32 @@ receipt, and signed GPU frameworks (primary and named modules). Copy those
 frameworks intact into the embedding app's `Frameworks/`; their binaries must
 retain the baked digests.
 
+### Mac development signing
+
+`EXACT_IDENTITY=<certificate-sha1>` selects a Keychain signing identity;
+`EXACT_IDENTITY=-` selects ad hoc signing for a local build. Otherwise,
+`DEVELOPMENT_TEAM=<team-id>` selects that team's Apple Development identity.
+A build chooses the newest valid certificate of the selected team authorized by
+the app’s profile and every embedded extension’s profile, when present. An explicit
+identity excluded by any of those profiles is refused. With no team selected, certificates of one team select that team automatically. Certificates
+of several teams require an installed macOS profile that resolves the team before
+choosing widgets, a share extension or grant entitlements. If profiles do not
+resolve it, the build refuses and names `DEVELOPMENT_TEAM=<team-id>`,
+`EXACT_IDENTITY=<sha1>` and `EXACT_IDENTITY=-`. This applies to every app,
+including an ordinary `secret.keep` app. With no identity at all, a build without
+profile requirements or extensions can still sign ad hoc. Developer ID profile
+ambiguity names `EXACT_DEVELOPER_ID=<sha1>`, the release identity selector.
+
+Certificate signing keeps the app's login Keychain access stable across
+rebuilds (LLP 1018 D7). Before each local development sign (`--timestamp=none`),
+the build prints the identity and file on stderr. Each has a 30-second limit.
+A failure retains the tool's error and explains how to allow access to the
+signing key. Mac development failures also name `EXACT_IDENTITY=-` as a way
+to build ad hoc; device failures never suggest it. Timestamped release signing
+has no such limit. Ad hoc signing cannot authorize provisioning-profile
+entitlements, Mac widgets or a share extension. Rebuilding an ad hoc app can
+prompt again for stored login-keychain items, blocking the first frame.
+
 ### Mac provisioning profiles
 
 Some entitlements hold on a Mac only under a provisioning profile that
@@ -1175,10 +1201,16 @@ Attest's environment (`device.attestation`), the Declared Age Range
 (`secret.keep` with a presence policy), and a passkey's associated domains
 (`auth.passkey`). An app whose grants need any of them is built from the
 newest installed macOS profile for its id (or the team's wildcard) that allows
-them all: a development profile that names this Mac for a development build, a
-Developer ID one for `exact release`. `EXACT_MAC_PROFILE=<path>` names one, and
-the build says why a named one does not fit. The build signs with that
-profile's team's identity (Apple Development, or `EXACT_DEVELOPER_ID` for a
+them all, within `DEVELOPMENT_TEAM` when set: a development profile that names
+this Mac for a development build, a Developer ID one for `exact release`.
+An already resolved identity restricts automatic profile selection to its team.
+`EXACT_MAC_PROFILE=<path>` names one, and
+the build says why a named one does not fit. A named profile overrides
+`DEVELOPMENT_TEAM`, as on devices. A team selected by `DEVELOPMENT_TEAM`
+requires a suitable profile. An explicit `EXACT_IDENTITY` overrides that setting;
+without a suitable profile for its certificate's team, a development build keeps
+the certificate, signs no profile entitlements and logs each grant's effect.
+With a profile, the build signs with its team's identity (Apple Development, or `EXACT_DEVELOPER_ID` for a
 release; one `EXACT_IDENTITY` or `EXACT_DEVELOPER_ID` names must be of that
 kind and team, or the build is refused), writes the application identifier,
 the team and each entitlement (an environment `development` under a
