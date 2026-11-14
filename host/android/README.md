@@ -83,8 +83,9 @@ builds of two apps at once do not wait on each other or mix outputs. The library
 with (`-PndkPath`). Beside the APK, `exact-build.json` records when the build began, the library and the Kotlin it
 compiled: a drive refuses an APK older than its sources by it. `--install` then installs the APK on the device a drive
 would use (`--run`: and launches it). The package id and the label are the app's
-`app.json` (`app.id`, with `-` as `_`, which a package name cannot hold; `app.name`). `ORG_GRADLE_PROJECT_idSuffix=.dev` in the environment builds a side-by-side package
-(`<app id>.dev`). `./gradlew :canvas:assembleRelease` builds the reader alone.
+`app.json` (`host.android.id`, defaulting to `app.id` with `-` as `_`; `app.name`).
+`ORG_GRADLE_PROJECT_idSuffix=.dev` in the environment builds a side-by-side package
+(`<Android package>.dev`). `./gradlew :canvas:assembleRelease` builds the reader alone.
 
 A component fixture may compile the real app's Kotlin with
 `ORG_GRADLE_PROJECT_modulesDir=<absolute path to the app's modules/android>`. The default

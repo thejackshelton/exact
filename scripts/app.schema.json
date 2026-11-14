@@ -715,7 +715,7 @@
           "description": "The reverse-DNS identity: the bundle identifier on Apple, the update stream's app id, and app.ts's `appId`. `exact new` writes com.example.<name>-<six hex digits>, unique to the app; change it before distributing.",
           "type": "string",
           "pattern": "^[a-zA-Z][a-zA-Z0-9-]*(\\.[a-zA-Z][a-zA-Z0-9-]*)+$",
-          "x-hint": "every dot-separated part starts with a letter, since this one id is also the Android package and the Linux app id, which require that (Apple alone allows a leading digit). Put a letter before a part that starts with a digit, as in com.example.x2048, and use that id everywhere; nothing else needs changing."
+          "x-hint": "every dot-separated part starts with a letter, since the Linux app id and the default Android package require that (Apple alone allows a leading digit). Put a letter before a part that starts with a digit, as in com.example.x2048, and set host.android.id when Android needs a different package."
         },
         "name": {
           "description": "The name a native host shows: the menu bar, the app switcher, Finder.",
@@ -1029,9 +1029,14 @@
           "additionalProperties": false
         },
         "android": {
-          "description": "Android: the painter, `minimumOS` (default 12), `certificates` for the origin's `assetlinks.json`, and `maven` libraries for the app's Kotlin.",
+          "description": "Android: the package `id` (default app.id), the painter, `minimumOS` (default 12), `certificates` for the origin's `assetlinks.json`, and `maven` libraries for the app's Kotlin.",
           "type": "object",
           "properties": {
+            "id": {
+              "description": "The Android package name (Gradle applicationId), independent of the Apple bundle identifier. Defaults to app.id with hyphens replaced by underscores. Set it before publishing; a store package name is permanent.",
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$"
+            },
             "painter": {
               "enum": ["ink"],
               "description": "Opt into ink (LLP 1149 D12); absent: the current painter, with `EXACT_PAINTER` overriding the choice, and ink refused until its Vulkan presenter is implemented."

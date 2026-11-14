@@ -535,7 +535,7 @@ export function resolveApp(nameOrCrate) {
     },
     /** The manifest, validated; the derived defaults when the app has none. */
     manifest,
-    /** The app identity, reverse-DNS: the bundle id on every platform (`build.mjs:48–49` derived it from the crate name before the manifest). */
+    /** The shared app identity and Apple bundle id; Android may declare its own package. */
     id: manifest.app.id,
     /** The name people see. */
     displayName: manifest.app.name,
@@ -545,6 +545,9 @@ export function resolveApp(nameOrCrate) {
     declared: existsSync(resolve(dir, 'app.json')),
   };
 }
+
+/** Android's store identity (LLP 1030 D2); the shared id remains the default. */
+export const androidPackageId = manifest => (manifest.host?.android?.id ?? manifest.app.id).replaceAll('-', '_');
 
 /** An app's authored tests (LLP 1017 P7), the files that exist: `app.test.contract`, then every other `*.test.contract`
  * beside it in name order (an app's tests split by area under the line cap). `test`, `verify` and the smoke run these. */

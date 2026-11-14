@@ -1275,7 +1275,9 @@ module.exports = {
 };
 ```
 
-Match both identifiers to Exact's app id. Link the EAS project and install
+Match `ios.bundleIdentifier` to Exact's `app.id` and `android.package` to
+`host.android.id` (default: `app.id` with hyphens replaced by underscores).
+Link the EAS project and install
 `expo-modules-autolinking` as a development dependency for EAS's config
 resolver (`bun add --dev expo-modules-autolinking`; commit the lockfile).
 EAS CLI reads it from the app's `node_modules` on the machine that runs
