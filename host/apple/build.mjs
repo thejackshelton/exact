@@ -698,7 +698,7 @@ async function main(args, lockHeld = false) {
   const development = cargoEnv.EXACT_UPDATE_TRUST === 'development' && args.includes('--url') ? developmentAdmission(app, launchEnv.EXACT_DEV_PLAN) : null;
   cargoEnv.EXACT_BAKE_OUTPUT = bakeOutput(app, cargoEnv);
   const hermes = ios && existsSync(resolve(app.dir, 'app.ts')) && cargoEnv.EXACT_JS_ENGINE !== 'stub' && hermesBundle(target, cargoEnv);
-  if (hermes && !hermes.installed) throw new Error(`the pinned Hermes bundle for ${target} is not installed. Install it once with:\n  ${hermes.fix}`);
+  if (hermes && !hermes.installed) throw new Error((await import('../../scripts/exact.mjs')).hermesRefusal(hermes, cargoEnv));
   // What the bake is expected to decide (the manifest's store level). The
   // shared Swift scratch is the same whatever it decides; the composition and
   // capture directory name the Swift host's environment before the bake ends.

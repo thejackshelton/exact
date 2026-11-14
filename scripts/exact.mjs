@@ -686,6 +686,15 @@ export function contract(args, env = process.env) {
 }
 /** A path as a shell reads it back: bare when it is plain, else single-quoted (a space in a folder's name). */
 export const shellPath = (path) => (/^[\w./@:+-]+$/.test(path) ? path : `'${path.replaceAll("'", "'\\''")}'`);
+/** An Apple build's refusal when `bundle` (`hermesBundle`) is not installed (LLP 1168.000 D4.5). One that setup installs
+ *  (`appleSetupTargets`, matched by bundle: both simulator triples are one) names this checkout's setup first, which a
+ *  copied checkout or a fresh HOME needs too, then the installer's line for it alone; another (the tvOS device's) that line. */
+export function hermesRefusal(bundle, env = process.env) {
+  const setup = appleSetupTargets().some((target) => hermesBundle(target, env).digest === bundle.digest); // HERMES_LEAN_SYS_DIR is one root for all
+  return setup
+    ? `the pinned Hermes bundle for ${bundle.target} is not installed: \`bun ${shellPath(resolve(ROOT, 'scripts/exact.mjs'))} setup\` installs it and the rest a native build needs (a copied checkout or a fresh HOME needs it too); this bundle alone:\n  ${bundle.fix}`
+    : `the pinned Hermes bundle for ${bundle.target} is not installed, and exact setup does not install this one: install it once with:\n  ${bundle.fix}`;
+}
 
 /** Whether this checkout's node_modules is missing (Bun on Windows writes `rolldown.exe` and `rolldown.bunx`):
  * every build's type check imports rolldown from it, and without it Bun's auto-install spins at full CPU with no

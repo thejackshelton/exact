@@ -7,7 +7,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, resolve, toNamespacedPath } from 'node:path';
 import { HERMES_INSTALLER, PINNED_RUST, hermesBundle, hermesLeanSysRoots } from './app.mjs';
-import { androidHermes, checkHermesBundles, appleCrossTargets, appleSetupTargets, platformRowNames } from './exact.mjs';
+import { androidHermes, checkHermesBundles, appleCrossTargets, appleSetupTargets, hermesRefusal, platformRowNames, shellPath } from './exact.mjs';
 import { iosAssets, iosTarget, entitlements, infoPlist, macInfoPlist, documentTypes, importedTypes, exportedTypes, writeUsageStrings, designCompatible, COMPATIBLE_SDK, moduleTripleFor } from '../host/apple/build.mjs';
 import { HOST_SDKS, olderVersion, useXcode, xcodeRefusal } from '../host/apple/devices.mjs';
 import { encodePng } from './png.mjs';
@@ -294,6 +294,15 @@ test('iOS Hermes preflight selects the pinned digest and exact installer command
     assert.equal(simulator.installed, false);
     assert.equal(simulator.root, intelSimulator.root, 'both simulator triples select the universal bundle');
     assert.equal(simulator.fix, `cargo run --manifest-path ${HERMES_INSTALLER} -- --target aarch64-apple-ios-sim`);
+    // A build that finds it missing (a fresh HOME, a copied checkout) names this checkout's setup first, then the
+    // installer's line for the bundle alone (LLP 1168.000 D4.5).
+    const said = hermesRefusal(simulator, env), setup = `bun ${shellPath(resolve(import.meta.dir, 'exact.mjs'))} setup`;
+    assert.ok(said.startsWith('the pinned Hermes bundle for aarch64-apple-ios-sim is not installed: '), said);
+    assert.ok(said.includes(`\`${setup}\` installs it and the rest a native build needs`), said);
+    assert.ok(said.indexOf(setup) < said.indexOf(simulator.fix) && said.endsWith(simulator.fix), said);
+    // The tvOS device's bundle, which setup does not install, is named with its installer line alone.
+    const tv = hermesBundle('aarch64-apple-tvos', env), tvSaid = hermesRefusal(tv, env);
+    assert.ok(!tvSaid.includes(setup) && tvSaid.includes('exact setup does not install this one') && tvSaid.endsWith(tv.fix), tvSaid);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

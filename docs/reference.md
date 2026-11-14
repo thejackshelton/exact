@@ -28,7 +28,8 @@ cargo run --manifest-path vendor/ibex/crates/hermes-lean-sys-installer/Cargo.tom
 The verified install lives under `~/.cargo/hermes-lean-sys/`. Exact sets
 `HERMES_LEAN_SYS_OFFLINE=1` in `.cargo/config.toml`, so an ordinary build
 neither downloads a bundle nor compiles Hermes; a missing install fails with
-the one-time command. `HERMES_LEAN_SYS_DIR` remains a development override.
+the one-time command, after `exact setup` where an iOS or tvOS build lacks a
+bundle setup installs. `HERMES_LEAN_SYS_DIR` remains a development override.
 The v6 set supports macOS, Linux, Windows, Android arm64, iOS devices and the
 universal iOS Simulator, plus tvOS devices and the arm64 tvOS Simulator. Exact
 selects Ibex's English `intl` data tier on Linux and Android, not
@@ -36,7 +37,9 @@ selects Ibex's English `intl` data tier on Linux and Android, not
 Android's receipt enables Intl and binds the English ICU tier. A Rust-only app
 needs no engine at run time.
 `exact setup` installs the host bundle and, on macOS, the iOS and tvOS Simulator
-bundles, and the iOS device bundle where Xcode's iphoneos SDK is installed.
+bundles, and the iOS device bundle where Xcode's iphoneos SDK is installed. The
+bundles live under `$HOME/.cargo`, and setup also fetches the locked crates: a
+copied or archived checkout, or a fresh `HOME`, needs `exact setup` again.
 `exact setup --check` runs Ibex's own offline resolver validation over that
 same set. On a CI worker, `bun <exact2>/scripts/exact.mjs setup --check
 --platform ios --device` checks the archive's prerequisites; `--platform
