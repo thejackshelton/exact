@@ -42,8 +42,9 @@ same set. On a CI worker, `bun <exact2>/scripts/exact.mjs setup --check
 --platform ios --device` checks the archive's prerequisites; `--platform
 android` checks the APK/AAB prerequisites, including JDK 17+ and the NDK's
 actual compiler paths. A scoped check fails when any of its rows is missing
-and does not check unrelated web tools. `--platform` is check-only; install
-commands are in the platform's CI recipe. The general check still reports
+and does not check unrelated web tools. Native `--platform` scopes are check-only;
+install commands are in the platform's CI recipe. `setup --platform web` installs
+[web prerequisites](#web-ci-preparation). The general check still reports
 optional tools separately (LLP 1086 D6).
 
 ### Windows painter
@@ -1195,6 +1196,29 @@ chosen among the profiles that grant the widgets' App Group and shared
 Keychain group and the grants' entitlements; with none that grants both, the
 grants sign nothing. An ad hoc build (`EXACT_IDENTITY=-`) signs no profile's
 entitlements.
+
+### Web CI preparation
+
+For a website's `web-build` and `test web` on Linux, install Bun at the version in
+Exact's `package.json` and rustup, then check out the desired Exact commit at the path
+the app's `exact.mjs` uses. From the app directory, run:
+
+```sh
+bun <exact2>/scripts/exact.mjs setup --platform web
+bun install --frozen-lockfile
+bun exact.mjs test web
+```
+
+The scoped setup installs the pinned stable and nightly Rust, the nightly's `rust-src`,
+`llvm-tools`, clippy and `wasm32-unknown-unknown` target, its standard-library dependencies,
+wasm-bindgen, Binaryen, Exact's `node_modules`, Playwright's Chromium and headless shell,
+and Exact's locked crates. The wasm tools serve Markdown, motion, the markup editor,
+text flow, Rust data modules and GPU modules as well as `--wasm` builds. `CHROME` may
+name an installed browser instead. Setup reports the same required rows as
+`setup --check --platform web`. It skips native targets, Hermes, game preparation and
+the native-build disk warning. Games need the full `setup`. On a minimal Linux image,
+`bun <exact2>/node_modules/playwright-core/cli.js install-deps chromium` installs
+Chromium's system libraries.
 
 ### Native CI preparation
 
