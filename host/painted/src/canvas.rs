@@ -1162,6 +1162,7 @@ impl<D: DataSource + Default> CanvasHost<D> {
     /// One turn: the presenter's work, then a recording when anything
     /// changed. `Some` is the new op stream (valid until the next call).
     pub fn frame(&mut self) -> Option<Vec<u32>> {
+        self.p.timer_visibility(false);
         // After the first frame: the windows' lead, realized off the frame.
         if self.painted_once && !self.lead && !self.responding {
             self.lead = true;

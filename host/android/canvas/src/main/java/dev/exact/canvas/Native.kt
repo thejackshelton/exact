@@ -39,6 +39,8 @@ object Native {
     @JvmStatic external fun chrome(): IntArray?
     @JvmStatic external fun frame(): ByteBuffer?
     @JvmStatic external fun poll(): Boolean
+    /** Advance tasks without recording a frame; milliseconds until the next task, or -1 while idle. */
+    @JvmStatic external fun background(applying: Boolean): Double
     @JvmStatic external fun acquired(running: Boolean)
     @JvmStatic external fun timerObservation(scrolling: Boolean, sampling: Boolean, applying: Boolean, idle: Boolean): Boolean
     @JvmStatic external fun timerHeld(): Int

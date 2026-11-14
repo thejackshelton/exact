@@ -3764,6 +3764,13 @@ change tasks (`analyze-change-cycle`). Keep pure computed values in `derive`.
 `change` takes no timer options; existing `after` and `every` schedules keep their
 elapsed-time behavior.
 
+On Android, these tasks can run while the activity is in the background and its
+process can execute; they need no drawn frame. `every(frame, …)` pauses there.
+Timers do not keep the process alive or bypass Android's
+[Doze and App Standby](https://developer.android.com/training/monitoring-device-state/doze-standby)
+restrictions. Use the background packages for work the system schedules;
+an in-process poll cannot guarantee a timely alert while the app is suspended.
+
 A task with `when` (a gated task), such as
 `task hide when toast != "" key=toastUntil` with `after(5000, expire)`, has its
 timer only while the gate holds, as an `if` arm has its nodes, and a new key
