@@ -47,12 +47,9 @@ fn same_carried(a: &exact_runner::Carried, b: &exact_runner::Carried) -> bool {
         slots,
         panels,
         resources,
+        waiting,
         streams,
         store_readers,
-        kept_modules,
-        kept_candidates,
-        kept_consumed,
-        kept_seeds,
         read_contents,
         now_ms,
         store,
@@ -67,24 +64,6 @@ fn same_carried(a: &exact_runner::Carried, b: &exact_runner::Carried) -> bool {
         && keeps_answers == &b.keeps_answers
         && streams == &b.streams
         && store_readers == &b.store_readers
-        && kept_modules == &b.kept_modules
-        && kept_consumed == &b.kept_consumed
-        && kept_candidates.len() == b.kept_candidates.len()
-        && kept_candidates.iter().zip(&b.kept_candidates).all(
-            |((an, asrc, aa, ad, asleep), (bn, bsrc, ba, bd, bsleep))| {
-                an == bn && asrc == bsrc && equivalent_all(aa, ba) && ad == bd && asleep == bsleep
-            },
-        )
-        && kept_seeds.len() == b.kept_seeds.len()
-        && kept_seeds.iter().zip(&b.kept_seeds).all(
-            |((an, asrc, aa, av, asleep), (bn, bsrc, ba, bv, bsleep))| {
-                an == bn
-                    && asrc == bsrc
-                    && equivalent_all(aa, ba)
-                    && equivalent(av, bv)
-                    && asleep == bsleep
-            },
-        )
         && read_contents == &b.read_contents
         && now_ms.to_bits() == b.now_ms.to_bits()
         && store == &b.store
@@ -108,6 +87,13 @@ fn same_carried(a: &exact_runner::Carried, b: &exact_runner::Carried) -> bool {
             .all(|((an, asrc, aa, av), (bn, bsrc, ba, bv))| {
                 an == bn && asrc == bsrc && equivalent_all(aa, ba) && equivalent(av, bv)
             })
+        && waiting.len() == b.waiting.len()
+        && waiting
+            .iter()
+            .zip(&b.waiting)
+            .all(|((an, asrc, aa, ad), (bn, bsrc, ba, bd))| {
+                an == bn && asrc == bsrc && equivalent_all(aa, ba) && ad == bd
+            })
         && uploads.len() == b.uploads.len()
         && uploads.iter().zip(&b.uploads).all(|(a, b)| {
             use exact_runner::UploadEnd::{Answered, Failed, Sent};
@@ -121,16 +107,4 @@ fn same_carried(a: &exact_runner::Carried, b: &exact_runner::Carried) -> bool {
                     _ => false,
                 }
         })
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn consumed_kept_eligibility_invalidates_a_prepared_plan() {
-        let before = exact_runner::Carried::default();
-        let mut after = before.clone();
-        assert!(super::same_carried(&before, &after));
-        after.kept_consumed.push(("feeds".into(), "feeds".into()));
-        assert!(!super::same_carried(&before, &after));
-    }
 }

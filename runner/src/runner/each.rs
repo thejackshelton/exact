@@ -136,7 +136,6 @@ impl<D: DataSource> Runner<D> {
             store_revision,
             placeholder: false,
             kept_seed: false,
-            provisional_kept: false,
             answered_for: None,
             asleep: false,
             slept: false,

@@ -18,12 +18,6 @@ This list holds what the [agent guide](contract-for-agents.md)'s rules don't mak
   when readers should share the evaluated result. A binding's failing child
   calculation unsets that binding; a root derive's failure refuses the commit.
   (Instance expression tests and the form fixture pair, 2026-11-13.)
-## Kept answers
-
-- **An empty account id leaves the first frame without account data.** Read
-  the non-secret id from `persist` state or a store-reading resource's kept
-  answer. A mutation's returned id can be copied into `persist` state for the
-  next launch. (Runner kept-identity tests, 2026-11-13.)
 
 ## Layout
 

@@ -55,7 +55,7 @@ impl<D: DataSource> Runner<D> {
     /// What a resource shows while its source hasn't answered and nothing
     /// is kept (LLP 1048.003 D6): its declared placeholder row's value this
     /// pass, or a list's or an option's empty value.
-    pub(super) fn placeholder(
+    fn placeholder(
         &self,
         i: usize,
         row: &ResourcesRow,
@@ -259,27 +259,8 @@ impl<D: DataSource> Runner<D> {
         // order, and the members whose elements left.
         let mut lists = std::collections::BTreeMap::<usize, Vec<usize>>::new();
         let mut leaving = Vec::new();
-        let admission = self.kept_admission_at_start();
-        let refused = self.keeping.refused.len();
         let mut passes = 0usize;
         loop {
-            // Only the settled identity may admit or consume a boot entry.
-            if passes > 0 {
-                self.keeping.refused.truncate(refused);
-                for (i, (candidate, consumed, seeded)) in admission.iter().enumerate() {
-                    let row = &mut self.resources[i];
-                    // A fresh answer supersedes the entry even if it cannot be kept.
-                    if row.stale {
-                        // An admitted seed is judged again too: an earlier
-                        // pass's identity did not settle.
-                        if candidate.is_some() || *seeded {
-                            states[i] = row.state.clone();
-                        }
-                        row.kept_candidate = candidate.clone();
-                        row.kept_consumed = *consumed;
-                    }
-                }
-            }
             passes += 1;
             if passes > self.resources.len() + 1 {
                 return Err(RunnerError::Cycle);
@@ -469,7 +450,6 @@ impl<D: DataSource> Runner<D> {
                                 store_revision: self.store.revision(),
                                 placeholder: false,
                                 kept_seed: false,
-                                provisional_kept: false,
                                 origin: 0,
                                 answered_for: None,
                                 asleep: false,
@@ -652,7 +632,6 @@ impl<D: DataSource> Runner<D> {
                                     store_revision: self.store.revision(),
                                     placeholder: true,
                                     kept_seed: false,
-                                    provisional_kept: false,
                                     origin: 0,
                                     answered_for: None,
                                     asleep: true,
@@ -776,24 +755,13 @@ impl<D: DataSource> Runner<D> {
                     // resource query, including through derives. Such a
                     // resource is device data just like a direct reader.
                     self.resources[i].store_reader |= store_dependent;
-                    let valid_args =
-                        super::query::check_arguments(self.plan.str(row.name), &args).is_ok();
-                    let mut slept = states[i].as_ref().is_some_and(|s| s.slept)
-                        || self.resources[i]
-                            .kept_candidate
-                            .as_ref()
-                            .is_some_and(|c| c.slept);
-                    let (kept_seed, unknown, admitted) =
-                        self.admit_kept(i, &args, &mut states, ready, valid_args);
-                    if let Some(candidate) = &mut self.resources[i].kept_candidate {
-                        candidate.slept = false;
-                    }
-                    if admitted && ready && !pending_res[i] {
-                        force.push(i);
-                    }
                     let forced = force.contains(&i);
                     let refreshed = forced || refreshing.contains(&i);
                     self.forget_refused(i, &args);
+                    // Invalid arguments take the query's refusal path, which fails
+                    // reconciliation without undoing the write's end.
+                    let valid_args =
+                        super::query::check_arguments(self.plan.str(row.name), &args).is_ok();
                     // A stand-in a refused activation failed holds for a kept
                     // seed's identifying arguments, whatever its context.
                     // NaN must keep its validation failure across unrelated commits.
@@ -832,6 +800,16 @@ impl<D: DataSource> Runner<D> {
                             p.args.clone_from(&args);
                         }
                     }
+                    // @ref LLP 1027.005 D3/D4 — only a persisted boot seed, or
+                    // an entry waiting for its identity, ignores context, and
+                    // only for known, equal identifying arguments (`kept_wait`).
+                    // A refused commit restores `states` and the resource row.
+                    let kept = self.admit_kept(i, &args, valid_args, ready, &mut states);
+                    let (kept_seed, hold) = (kept.kept_seed, kept.hold);
+                    if kept.admitted_early {
+                        pending_res[i] = false;
+                        awaiting[i] = false;
+                    }
                     // The value may still answer older arguments while a
                     // request is in flight. Reuse follows the current ask;
                     // the standing value keeps its own provenance.
@@ -855,7 +833,7 @@ impl<D: DataSource> Runner<D> {
                     let reuse = states[i]
                         .as_ref()
                         .filter(|_| valid_args || failed)
-                        .filter(|_| !unknown)
+                        .filter(|_| !hold)
                         .filter(|s| {
                             kept_seed
                                 || failed
@@ -1207,7 +1185,6 @@ impl<D: DataSource> Runner<D> {
                                 }
                                 Err(error) => return Err(error),
                                 Ok(Answer::Now(v)) => {
-                                    slept = false;
                                     generation = self.inspected_request(i);
                                     if pending_res[i] || self.streaming(i) {
                                         // Newer arguments answered now: the older
@@ -1279,13 +1256,15 @@ impl<D: DataSource> Runner<D> {
                         if !checked {
                             self.check_shape(i, value.get(&self.plan))?;
                         }
-                        // Equal values share an object only with the same
-                        // provenance: a fresh answer confirms a compiled
-                        // fallback even when its value is unchanged.
+                        // A fresh answer equal to the last keeps its object,
+                        // unless that would lose the compiled mark (a refused
+                        // kept seed equal to the compiled fallback is still a
+                        // fallback to an identity that reads it, kept.rs), or
+                        // give a placeholder one (`secrets_unseen`).
                         match &states[i] {
                             Some(s)
                                 if Held::equivalent(&s.value, &value)
-                                    && s.value.is_compiled() == value.is_compiled()
+                                    && (s.value.is_compiled() || !value.is_compiled())
                                     && !(placeholder && s.value.is_compiled()) =>
                             {
                                 s.value.clone()
@@ -1306,11 +1285,11 @@ impl<D: DataSource> Runner<D> {
                         Some(old) if Held::same(old, &shown)
                     );
                     resources[i] = Some(shown);
-                    let provisional_kept = self.resources[i].stale
-                        && !placeholder
-                        && states[i]
-                            .as_ref()
-                            .is_some_and(|s| s.provisional_kept && Held::same(&s.value, &value));
+                    // A value kept across idleness stays no answer until a
+                    // fresh one, asked since, replaces it (LLP 1161.001 D1).
+                    let slept = states[i]
+                        .as_ref()
+                        .is_some_and(|s| s.slept && s.origin == origin && !placeholder);
                     states[i] = Some(ResourceState {
                         inspection_generation: generation,
                         args: value_args,
@@ -1318,11 +1297,9 @@ impl<D: DataSource> Runner<D> {
                         store_revision: self.store.revision(),
                         placeholder,
                         kept_seed,
-                        provisional_kept,
                         origin,
                         answered_for,
                         asleep: false,
-                        // Waking needs a fresh answer (LLP 1161.001 D1).
                         slept,
                     });
                     self.inspected_success(i, generation);

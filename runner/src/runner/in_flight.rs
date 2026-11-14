@@ -49,12 +49,10 @@ impl<D: DataSource> Runner<D> {
         if s.placeholder || s.slept {
             return false;
         }
-        let row = self.resource_row(i);
-        let identity = row.args.len as usize - usize::from(row.context);
+        let context = self.resource_row(i).context as usize;
+        let identity = |a: &[Value]| a.len().saturating_sub(context).min(a.len());
         let asked = s.answered_args();
-        asked
-            .get(..identity)
-            .is_some_and(|a| Some(a) == now.get(..identity))
+        asked[..identity(asked)] == now[..identity(now)]
     }
 
     /// The pending flags `pending(x)` reads, from the tickets in flight and

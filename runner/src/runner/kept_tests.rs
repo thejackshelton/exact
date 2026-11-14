@@ -278,19 +278,6 @@ fn an_identity_mismatch_discards_the_seed_and_changing_back_does_not_readmit_it(
     assert!(!state(&r).kept_seed);
     assert!(r.data.asks.is_empty());
     assert_eq!(answer_writes(&r), 0);
-    for _ in 0..2 {
-        r = Runner::boot_carrying(
-            r.plan().clone(),
-            Source::default(),
-            Kernel::with_monospace(),
-            &r.carry(),
-            Default::default(),
-            "/",
-        )
-        .unwrap();
-        shows(&r, "loading");
-        assert!(!state(&r).kept_seed);
-    }
 }
 
 #[test]
@@ -735,7 +722,9 @@ fn only_explicitly_kept_surface_facts_retain_a_launch_snapshot() {
 }
 
 #[test]
-fn a_cold_boot_forgets_entries_for_removed_resources() {
+fn a_cold_boot_forgets_kept_answers_no_declared_reader_seeds() {
+    // `answer` is a declared reader; `gone` names no resource, as after a
+    // reader is removed or made transient (the Brooks port's Health summary).
     let mut snapshot = entry(&[Value::str("A")], &Value::str("kept"));
     let gone = kept::kept_name("gone");
     snapshot.push((gone.clone(), kept::encode(&[], &Value::str("private"))));
@@ -900,8 +889,8 @@ fn a_refusal_after_boot_is_journaled_and_a_rolled_back_one_is_not() {
     let lines = refused(&r);
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert!(
-        lines[0].contains(
-            "answer did not use its kept answer: kept for [\"A\"], this launch asks for [\"C\"]"
+        lines[0].ends_with(
+            "answer did not use its kept answer: kept for [\"A\"], this launch asks for [\"C\"]: identifying argument 1 is \"C\", reading state car = \"C\""
         ),
         "{lines:?}"
     );

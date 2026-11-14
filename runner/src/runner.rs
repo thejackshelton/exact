@@ -107,6 +107,7 @@ mod into_view;
 pub(crate) mod kept;
 #[cfg(test)]
 mod kept_tests;
+mod kept_wait;
 mod lines;
 mod lists;
 mod media_session;
@@ -216,9 +217,6 @@ struct ResourceState {
     /// readiness (LLP 1027.005 D3). Settlement and rollback copy this with
     /// its value; activation or losing that identity consumes it.
     kept_seed: bool,
-    /// An admitted kept value still awaiting a fresh answer. Reload carries
-    /// it separately from settled answers, with its identity and stale status.
-    provisional_kept: bool,
     /// The sequence when this answer was asked (0 for a compiled, kept,
     /// carried or placeholder value): a write that landed before it is
     /// answered by it (`writes.rs`).
@@ -777,7 +775,14 @@ impl<D: DataSource> Runner<D> {
                 let Some(resource) = name.strip_prefix(Store::KEPT) else {
                     continue;
                 };
-                let compatible = same_logic && kept::carries_entry(plan, carried, resource);
+                let compatible = same_logic
+                    && plan.resources.iter().any(|r| {
+                        plan.str(r.name) == resource
+                            && carried
+                                .store_readers
+                                .iter()
+                                .any(|(n, s)| n == resource && s == plan.str(r.source))
+                    });
                 let transient =
                     (plan.resources.iter()).any(|r| r.transient && plan.str(r.name) == resource);
                 if private || !compatible || transient {
@@ -985,7 +990,6 @@ impl<D: DataSource> Runner<D> {
                         store_revision: runner.store.revision(),
                         placeholder: false,
                         kept_seed: false,
-                        provisional_kept: false,
                         answered_for: None,
                         asleep: false,
                         slept: false,
@@ -1018,9 +1022,8 @@ impl<D: DataSource> Runner<D> {
         // `data_ready`.
         let ready = runner.data.ready();
         runner.keeping.on = !private && (!ready || carried.is_some_and(|c| c.keeps_answers));
-        runner.carry_kept_consumed_in(carried.filter(|_| same_logic));
         runner.seed_at_boot(&seeded, ready, private);
-        runner.carry_kept_in(carried.filter(|_| same_logic), private);
+        runner.carry_waiting_in(carried.filter(|_| same_logic), private);
         // A seeded answer asked again, an open stream's or, on a device with
         // its own store, a store reader's, shows until it answers: asked now
         // when its source can answer, else at `data_ready`.

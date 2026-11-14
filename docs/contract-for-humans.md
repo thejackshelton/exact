@@ -716,20 +716,6 @@ visible even when call arguments changed, so private-data views must gate it by
 owner and authorization. Neither call arguments nor `with` make a resource wait
 for an upstream request to succeed. The default web JS target keeps no persisted
 resource answers (LLP 1027.005 D5).
-
-To show account data on the first frame, its non-secret account id must come
-from `persist` state or a store-reading resource's kept answer. If a mutation
-returns the id, copy it into `persist` state for the next launch. When an id
-starts empty or its resource has no admitted device answer, the boot entry
-waits: its first known match can show the kept answer, even after source
-readiness, while revalidation is pending. A known different identity, a fresh
-answer replacing the entry, or forgetting it consumes that opportunity. An
-admitted seed that loses its identity is never readmitted. A compatible development
-reload preserves consumed eligibility, waiting entries and admitted seeds. An
-admitted seed stays stale, keeps its identity and sleep history, and is asked
-again. The journal says when an entry is still waiting; once a known mismatch consumes it, the
-journal names the differing input and its current value.
-
 The minute must already contain the current sample for the first ask; a timer
 can update it thereafter. Use `refresh` or `refreshes` for values whose only job
 is forcing another ask. Await true asynchronous prerequisites, such as a valid
